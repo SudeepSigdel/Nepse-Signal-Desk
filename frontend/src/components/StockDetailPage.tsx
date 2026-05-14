@@ -16,9 +16,9 @@ export default function StockDetailPage() {
   const latestMacd = detail?.indicators.macd.at(-1) ?? null
 
   return (
-    <div className="min-h-screen page-fade-in soft-grid pb-20">
-      <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
+      <nav className="w-full sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
+        <div className="w-full max-w-7xl pl-8 pr-4 md:pl-16 lg:pl-24">
           <div className="flex h-16 items-center gap-4">
             <button 
               onClick={() => navigate('/')}
@@ -37,7 +37,7 @@ export default function StockDetailPage() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
+      <main className="w-full max-w-7xl pl-8 pr-4 pt-8 md:pl-16 lg:pl-24">
         {error && (
           <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-200">
             <p className="font-medium">Error loading data</p>

@@ -38,10 +38,10 @@ export default function DashboardOverview() {
   ]
 
   return (
-    <div className="min-h-screen page-fade-in soft-grid pb-20">
+    <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
       <TopNav />
       
-      <main className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
+      <main className="w-full max-w-7xl pl-8 pr-4 pt-8 md:pl-16 lg:pl-24">
         
         {/* Error State */}
         {error && (
@@ -107,10 +107,10 @@ export default function DashboardOverview() {
               <div className="glass-panel rounded-xl p-5 stagger-in">
                 <h3 className="section-kicker mb-4">Summary</h3>
                 <div className="space-y-4">
-                  <KpiRow label="Total Signals" value={filteredStocks.length} />
-                  <KpiRow label="High Conviction" value={visibleHighConv} highlight="green" />
-                  <KpiRow label="High Tier" value={highConfidence} />
-                  <KpiRow label="Medium Tier" value={mediumConfidence} />
+                  <KpiRow label="Total Signals " value={filteredStocks.length} />
+                  <KpiRow label="High Conviction " value={visibleHighConv} highlight="green" />
+                  <KpiRow label="High Tier " value={highConfidence} />
+                  <KpiRow label="Medium Tier " value={mediumConfidence} />
                 </div>
               </div>
 
@@ -218,13 +218,10 @@ function TopNav() {
   const refreshSeconds = Math.round(REFRESH_INTERVAL_MS / 1000)
   
   return (
-    <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <nav className="w-full sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
+      <div className="w-full max-w-7xl pl-8 pr-4 md:pl-16 lg:pl-24">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black font-display font-bold text-xl">
-              N
-            </div>
+          <div className="flex items-center">
             <span className="font-display font-semibold text-white tracking-tight">
               {APP_TITLE}
             </span>
