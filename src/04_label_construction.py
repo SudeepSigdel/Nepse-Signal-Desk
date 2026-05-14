@@ -14,8 +14,10 @@ import pandas as pd
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-PROCESSED_DIR = "C:/Users/sudee/projects/Final Year Project/data/processed"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 TRANSACTION_COST = 0.01   
 

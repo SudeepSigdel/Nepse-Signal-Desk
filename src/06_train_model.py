@@ -4,6 +4,7 @@ import os
 import json
 import warnings
 warnings.filterwarnings("ignore")
+from pathlib import Path
 
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
@@ -11,7 +12,8 @@ from sklearn.metrics import roc_auc_score, classification_report
 import matplotlib.pyplot as plt
 
 
-PROCESSED_DIR = "C:/Users/sudee/projects/Final Year Project/data/processed"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_labeled.parquet"))
 df["Date"] = pd.to_datetime(df["Date"])

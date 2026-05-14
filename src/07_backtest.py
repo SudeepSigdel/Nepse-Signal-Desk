@@ -4,9 +4,11 @@ import os
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore")
+from pathlib import Path
 
-PROCESSED_DIR  = "C:/Users/sudee/projects/Final Year Project/data/processed"
-OUTPUTS_DIR    = "C:/Users/sudee/projects/Final Year Project/outputs"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 TRANS_COST     = 0.01    # 1% round-trip NEPSE transaction cost
 PROB_THRESHOLD = 0.55    # Only trade when model is at least 55% confident
                          # This filters out low-confidence predictions

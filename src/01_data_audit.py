@@ -3,10 +3,14 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
 
-RAW_DATA_DIR = "C:/Users/sudee/projects/Final Year Project/data/raw"
-OUTPUT_DIR= "C:/Users/sudee/projects/Final Year Project/data/processed"
-os.makedirs(OUTPUT_DIR, exist_ok= True)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
+OUTPUT_DIR = PROJECT_ROOT / "data" / "processed"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
 all_dataframes = []
 
@@ -101,6 +105,6 @@ plt.ylabel("Number of Trading Days")
 plt.title("Data Coverage per Stock")
 plt.legend()
 plt.tight_layout()
-plt.savefig(os.path.join("C:/Users/sudee/projects/Final Year Project/outputs", "data_coverage.png"), dpi=150)
+plt.savefig(OUTPUTS_DIR / "data_coverage.png", dpi=150)
 plt.show()
 print("Chart saved to outputs/data_coverage.png")

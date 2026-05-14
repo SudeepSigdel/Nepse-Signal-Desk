@@ -8,9 +8,11 @@ import matplotlib.gridspec as gridspec
 from sklearn.metrics import roc_curve, auc
 import warnings
 warnings.filterwarnings("ignore")
+from pathlib import Path
 
-PROCESSED_DIR = "C:/Users/sudee/projects/Final Year Project/data/processed"
-REPORT_DIR    = os.path.join(PROCESSED_DIR, "report")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+REPORT_DIR = PROCESSED_DIR / "report"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 

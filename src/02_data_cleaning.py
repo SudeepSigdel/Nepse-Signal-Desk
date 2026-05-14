@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
 import os
+from pathlib import Path
 
-PROCESSED_DIR = "C:/Users/sudee/projects/Final Year Project/data/processed"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_combined.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows x {df.shape[1]} columns")

@@ -3,8 +3,10 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from pathlib import Path
 
-PROCESSED_DIR = "C:/Users/sudee/projects/Final Year Project/data/processed"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 PRIMARY_LABEL = "Label_10d"
 
