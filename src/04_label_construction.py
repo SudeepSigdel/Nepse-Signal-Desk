@@ -62,7 +62,11 @@ print(" Forward returns computed")
 df["Label_5d"]  = (df["Fwd_ret_5d"]  > TRANSACTION_COST).astype(int)
 df["Label_10d"] = (df["Fwd_ret_10d"] > TRANSACTION_COST).astype(int)
 
-print(" Binary labels created")
+# SELL LABELS: Mirror logic with inverted threshold
+# A SELL signal when stock drops more than 1% in next 10 days
+df["Label_10d_sell"] = (df["Fwd_ret_10d"] < -TRANSACTION_COST).astype(int)
+
+print(" Binary labels created (BUY + SELL)")
 
 
 
@@ -76,9 +80,23 @@ for label in ["Label_5d", "Label_10d"]:
     total   = count_1 + count_0
     pct_1   = count_1 / total * 100
     pct_0   = count_0 / total * 100
-    print(f"\n{label}:")
+    print(f"\n{label} (BUY signals):")
     print(f"  Label=1 (trade succeeded): {count_1:>7,}  ({pct_1:.1f}%)")
     print(f"  Label=0 (trade failed):    {count_0:>7,}  ({pct_0:.1f}%)")
+    print(f"  Imbalance ratio: {max(pct_0,pct_1)/min(pct_0,pct_1):.2f}:1")
+
+# SELL labels distribution
+if "Label_10d_sell" in df.columns:
+    print("\n" + "-"*55)
+    label = "Label_10d_sell"
+    count_1 = df[label].sum()
+    count_0 = (df[label] == 0).sum()
+    total   = count_1 + count_0
+    pct_1   = count_1 / total * 100
+    pct_0   = count_0 / total * 100
+    print(f"\n{label} (SELL signals - mirror logic):")
+    print(f"  Label=1 (downside -1%+): {count_1:>7,}  ({pct_1:.1f}%)")
+    print(f"  Label=0 (no downside):   {count_0:>7,}  ({pct_0:.1f}%)")
     print(f"  Imbalance ratio: {max(pct_0,pct_1)/min(pct_0,pct_1):.2f}:1")
 
 

@@ -19,7 +19,10 @@ export interface Stock {
   close: number
   rsi: number | null
   confidence: number
+  buy_confidence?: number
+  sell_confidence?: number | null
   tier: string
+  verdict?: string
 }
 
 export interface ApiStock {
@@ -28,7 +31,10 @@ export interface ApiStock {
   Close: number | null
   rsi?: number | null
   confidence: number
+  buy_confidence?: number
+  sell_confidence?: number | null
   Tier: string
+  verdict?: string
 }
 
 export interface StockResponse {
@@ -42,7 +48,10 @@ const normalizeStock = (stock: ApiStock): Stock => ({
   close: stock.Close ?? 0,
   rsi: stock.rsi ?? null,
   confidence: stock.confidence,
+  buy_confidence: stock.buy_confidence ?? stock.confidence,
+  sell_confidence: stock.sell_confidence ?? null,
   tier: stock.Tier,
+  verdict: stock.verdict,
 })
 
 export const useStocks = (refreshInterval: number = 30000) => {

@@ -1,19 +1,76 @@
+import React, { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { APP_TITLE } from '../config'
 import { useSignal, useStockDetail } from '../hooks/useStocks'
 import StockChart from './StockChart'
+import { SignalCard } from './SignalCard'
+import { PositionExitGuidance } from './PositionExitGuidance'
+
+interface ExitStatus {
+  should_exit: boolean;
+  reason?: string;
+  exit_type?: 'time_based' | 'stop_loss' | 'signal_decay';
+  days_held: number;
+  days_remaining: number;
+  current_return_pct: number;
+  distance_to_stop_loss_pct: number;
+  risks: string[];
+}
 
 export default function StockDetailPage() {
   const { symbol = '' } = useParams()
   const navigate = useNavigate()
   const { detail, loading: detailLoading, error: detailError } = useStockDetail(symbol)
   const { signal, loading: signalLoading, error: signalError } = useSignal(symbol)
+  
+  // Position tracking state
+  const [userEntryDate, setUserEntryDate] = useState('')
+  const [userEntryPrice, setUserEntryPrice] = useState<number>(0)
+  const [exitStatus, setExitStatus] = useState<ExitStatus | null>(null)
+  const [exitLoading, setExitLoading] = useState(false)
 
   const isLoading = detailLoading || signalLoading
   const error = detailError || signalError
   const latestClose = detail?.candles.at(-1)?.c ?? null
   const latestRsi = detail?.indicators.rsi.at(-1) ?? null
   const latestMacd = detail?.indicators.macd.at(-1) ?? null
+
+  // Check exit status when position details change
+  React.useEffect(() => {
+    if (userEntryDate && userEntryPrice && latestClose && signal?.confidence) {
+      checkExitStatus()
+    }
+  }, [userEntryDate, userEntryPrice, latestClose, signal?.confidence])
+
+  const checkExitStatus = async () => {
+    if (!userEntryDate || !userEntryPrice || !latestClose || !signal?.confidence) return
+    
+    setExitLoading(true)
+    try {
+      const response = await fetch('/api/positions/exit-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: symbol.toUpperCase(),
+          entry_date: userEntryDate,
+          entry_price: userEntryPrice,
+          current_price: latestClose,
+          current_buy_conf: signal.confidence
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setExitStatus(data)
+      } else {
+        console.error('Failed to check exit status:', response.statusText)
+      }
+    } catch (err) {
+      console.error('Error checking exit status:', err)
+    } finally {
+      setExitLoading(false)
+    }
+  }
 
   return (
     <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
@@ -54,61 +111,78 @@ export default function StockDetailPage() {
             
             {/* Top Stats Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-in">
-              <MetricCard label="Latest Close" value={formatNumber(latestClose)} />
-              <MetricCard label="RSI (14)" value={formatNumber(latestRsi)} />
-              <MetricCard label="MACD" value={formatNumber(latestMacd)} />
-              <MetricCard label="Data Points" value={detail.days.toString()} />
+              <MetricCard label="Latest Close" value={formatNumber(latestClose)} tooltip="Current stock price" />
+              <MetricCard label="RSI (14)" value={formatNumber(latestRsi)} tooltip="Measures momentum: <30=Oversold, >70=Overbought" />
+              <MetricCard label="MACD" value={formatNumber(latestMacd)} tooltip="Trend direction indicator" />
+              <MetricCard label="Data Points" value={detail.days.toString()} tooltip="Number of trading days analyzed" />
             </div>
 
             {/* AI Signal Analysis */}
             {signal && (
-              <div className="glass-panel rounded-xl p-6 stagger-in">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-                  
-                  <div className="max-w-2xl">
-                    <div className="flex items-center gap-3 mb-3">
-                      <h2 className="text-lg font-semibold text-white">AI Analysis</h2>
-                      <VerdictBadge verdict={signal.verdict} color={signal.verdict_color} />
-                    </div>
-                    
-                    <p className="text-neutral-300 leading-relaxed">
-                      {signal.description}
-                    </p>
+              <SignalCard 
+                verdict={signal.verdict}
+                verdict_color={signal.verdict_color}
+                confidence={signal.confidence}
+                description={signal.description}
+                active_signals={signal.active_signals}
+                close={latestClose ?? undefined}
+              />
+            )}
 
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <span className="chip-action text-xs">Date: {signal.date}</span>
-                      <span className="chip-action text-xs">RSI: {signal.indicators.rsi_zone}</span>
-                      <span className="chip-action text-xs">MACD: {signal.indicators.macd_bias}</span>
-                      <span className="chip-action text-xs">{signal.indicators.volume_note}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-4 md:min-w-[240px]">
-                    <div className="glass-panel rounded-lg p-4 bg-black/20 border-white/5">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">Confidence Score</div>
-                      <div className="font-display text-4xl font-semibold text-white">
-                        {(signal.confidence * 100).toFixed(1)}%
-                      </div>
-                    </div>
-
-                    <div className="glass-panel rounded-lg p-4 bg-black/20 border-white/5">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">Active Triggers</div>
-                      <div className="flex flex-wrap gap-2">
-                        {signal.active_signals.length > 0 ? (
-                          signal.active_signals.map(item => (
-                            <span key={item} className="inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold bg-white/10 text-neutral-300">
-                              {item}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-neutral-500">None detected</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
+            {/* Your Position Input */}
+            <div className="glass-panel rounded-xl p-5 stagger-in">
+              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                💼 Track Your Position
+              </h3>
+              <p className="text-neutral-400 text-sm mb-4">
+                Enter your entry date and price to get exit guidance
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 mb-2">
+                    Entry Date
+                  </label>
+                  <input
+                    type="date"
+                    value={userEntryDate}
+                    onChange={(e) => setUserEntryDate(e.target.value)}
+                    className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 mb-2">
+                    Entry Price
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="100.50"
+                    value={userEntryPrice || ''}
+                    onChange={(e) => setUserEntryPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={checkExitStatus}
+                    disabled={!userEntryDate || !userEntryPrice || exitLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-semibold transition"
+                  >
+                    {exitLoading ? '...' : 'Check Status'}
+                  </button>
                 </div>
               </div>
+            </div>
+
+            {/* Exit Guidance */}
+            {exitStatus && (
+              <PositionExitGuidance 
+                status={exitStatus}
+                onExit={() => {
+                  setUserEntryDate('')
+                  setUserEntryPrice(0)
+                  setExitStatus(null)
+                }}
+              />
             )}
 
             {/* Charts */}
@@ -123,29 +197,25 @@ export default function StockDetailPage() {
   )
 }
 
-function MetricCard({ label, value }: { label: string, value: string }) {
+function MetricCard({ label, value, tooltip }: { label: string, value: string, tooltip?: string }) {
+  const [showTooltip, setShowTooltip] = React.useState(false)
+  
   return (
-    <div className="glass-panel rounded-xl p-5">
+    <div 
+      className="glass-panel rounded-xl p-5 relative group cursor-help"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
       <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">{label}</div>
       <div className="font-display text-2xl font-semibold text-white">{value}</div>
+      
+      {tooltip && showTooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-xs text-neutral-300 whitespace-nowrap z-10 shadow-lg">
+          {tooltip}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-neutral-900"></div>
+        </div>
+      )}
     </div>
-  )
-}
-
-function VerdictBadge({ verdict, color }: { verdict: string, color: string }) {
-  const colorMap: Record<string, string> = {
-    green: 'bg-status-green text-status-green border-status-green/20',
-    orange: 'bg-status-amber text-status-amber border-status-amber/20',
-    red: 'bg-status-red text-status-red border-status-red/20',
-    gray: 'bg-white/10 text-neutral-300 border-white/10',
-  }
-  
-  const selectedClass = colorMap[color] || colorMap.gray
-  
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider border ${selectedClass}`}>
-      {verdict}
-    </span>
   )
 }
 

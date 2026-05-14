@@ -46,14 +46,18 @@ jobs:
         env:
           PYTHONUNBUFFERED: '1'
         run: |
+          echo "Starting NEPSE scraper at $(date -u)"
           python "scrapper/Nepse Scraper.py" --source sharesansar --delay 0.2
+          echo "Scraper completed at $(date -u)"
 
       - name: Run daily pipeline
         env:
           MPLBACKEND: Agg
           PYTHONUNBUFFERED: '1'
         run: |
+          echo "Starting daily pipeline at $(date -u)"
           python automation/daily_pipeline.py --source sharesansar --delay 0.2 --skip-scrape
+          echo "Pipeline completed at $(date -u)"
 
       - name: Commit updated data
         if: success()
@@ -65,7 +69,7 @@ jobs:
             echo "No data changes to commit."
             exit 0
           fi
-          git commit -m "chore: refresh daily pipeline outputs"
+          git commit -m "chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
           git push
 
       - name: Upload logs and outputs
@@ -78,3 +82,11 @@ jobs:
             data/processed/**
             data/raw/**
           if-no-files-found: warn
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Daily pipeline failed at $(date -u)"
+          echo "Check workflow logs for details"
+          exit 1
+
