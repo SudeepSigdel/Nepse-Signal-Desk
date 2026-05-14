@@ -1,0 +1,17 @@
+[Unit]
+Description=NEPSE Daily Scrape and ML Pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/final-year-project
+Environment=PROJECT_ROOT=/opt/final-year-project
+Environment=SOURCE=sharesansar
+Environment=DELAY=0.2
+ExecStart=/bin/bash /opt/final-year-project/automation/run_daily_pipeline.sh
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

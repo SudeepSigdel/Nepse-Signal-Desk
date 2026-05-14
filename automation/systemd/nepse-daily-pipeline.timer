@@ -1,0 +1,10 @@
+[Unit]
+Description=Run NEPSE pipeline daily
+
+[Timer]
+OnCalendar=*-*-* 16:30:00
+Persistent=true
+Unit=nepse-daily-pipeline.service
+
+[Install]
+WantedBy=timers.target

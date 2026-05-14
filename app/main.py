@@ -1,58 +1,122 @@
 import json
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import pandas as pd
-import os
-import numpy as np
-import pickle
 import glob
+import os
+import pickle
 import re
 from pathlib import Path
+from typing import Optional
 
-app = FastAPI()
+import numpy as np
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
+# ─── Import config and logging ──────────────────────────────
+from app.config import settings
+from app.logging_config import setup_logging, get_logger
+
+# ─── Setup logging ──────────────────────────────────────────
+setup_logging()
+logger = get_logger(__name__)
+
+logger.info(f"Starting NEPSE AI Signals API v{settings.api_version}")
+logger.info(f"Environment: {settings.env}")
+logger.info(f"Debug: {settings.debug}")
+
+# ─── Create FastAPI app ─────────────────────────────────────
+app = FastAPI(
+    title=settings.api_title,
+    version=settings.api_version,
+    debug=settings.debug,
+)
+
+# ─── Add CORS middleware with configured origins ───────────
+logger.info(f"CORS origins: {settings.cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-PROCESSED_DIR = BASE_DIR / "data" / "processed"
-MODEL_DIR = PROCESSED_DIR / "models"
-RAW_DIR = BASE_DIR / "data" / "raw"
+# ─── Resolve data paths from config ────────────────────────
+BASE_DIR = settings.project_root
+PROCESSED_DIR = settings.data_processed_dir
+MODEL_DIR = settings.model_dir
+RAW_DIR = settings.raw_data_dir
 FEATURES_PATH = PROCESSED_DIR / "all_stocks_features.parquet"
 CONFIG_PATH = PROCESSED_DIR / "fold_config.json"
 
-with open(CONFIG_PATH, encoding="utf-8") as f:
-    CONFIG = json.load(f)
+# ─── Verify paths exist ─────────────────────────────────────
+required_paths = [PROCESSED_DIR, MODEL_DIR, FEATURES_PATH, CONFIG_PATH]
+for path in required_paths:
+    if not path.exists():
+        logger.error(f"Required path not found: {path}")
 
+# ─── Load fold config ──────────────────────────────────────
+try:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        CONFIG = json.load(f)
+    logger.info(f"Loaded fold config from {CONFIG_PATH}")
+except FileNotFoundError as e:
+    logger.error(f"fold_config.json not found at {CONFIG_PATH}: {e}")
+    CONFIG = {}
+except json.JSONDecodeError as e:
+    logger.error(f"Invalid JSON in fold_config.json: {e}")
+    CONFIG = {}
+
+# ─── Load model (latest fold) ───────────────────────────────
 model_candidates = glob.glob(str(MODEL_DIR / "model_fold*.pkl"))
 if not model_candidates:
-    raise FileNotFoundError(f"No model files found in {MODEL_DIR}")
+    logger.error(f"No model files found in {MODEL_DIR}")
+    MODEL = None
+    SCALER = None
+    FEATURE_COLS = None
+else:
 
-def fold_num(path):
-    m = re.search(r"model_fold(\d+)\.pkl$", os.path.basename(path))
-    return int(m.group(1)) if m else -1
+    def fold_num(path):
+        m = re.search(r"model_fold(\d+)\.pkl$", os.path.basename(path))
+        return int(m.group(1)) if m else -1
 
-MODEL_PATH = max(model_candidates, key=fold_num)
+    MODEL_PATH = max(model_candidates, key=fold_num)
+    logger.info(f"Loading model from {MODEL_PATH}")
 
-with open(MODEL_PATH, "rb") as f:
-    bundle = pickle.load(f)
-    MODEL = bundle["model"]
-    SCALER = bundle["scaler"]
-    FEATURE_COLS = bundle.get("feature_cols") or CONFIG.get("feature_cols")
+    try:
+        with open(MODEL_PATH, "rb") as f:
+            bundle = pickle.load(f)
+            MODEL = bundle["model"]
+            SCALER = bundle["scaler"]
+            FEATURE_COLS = bundle.get("feature_cols") or CONFIG.get("feature_cols")
+        logger.info(f"Model loaded successfully. Features: {len(FEATURE_COLS) if FEATURE_COLS else 0}")
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+        MODEL = None
+        SCALER = None
+        FEATURE_COLS = None
 
 if not FEATURE_COLS:
-    raise KeyError("feature_cols missing in both model bundle and fold_config.json")
+    logger.warning("feature_cols missing in both model bundle and fold_config.json")
 
-FEATURES_DF = pd.read_parquet(FEATURES_PATH)
-FEATURES_DF["Date"] = pd.to_datetime(FEATURES_DF["Date"])
+# ─── Load features data ─────────────────────────────────────
+try:
+    FEATURES_DF = pd.read_parquet(FEATURES_PATH)
+    FEATURES_DF["Date"] = pd.to_datetime(FEATURES_DF["Date"])
+    logger.info(f"Loaded features from {FEATURES_PATH}: {len(FEATURES_DF)} rows")
+except FileNotFoundError:
+    logger.error(f"Features file not found: {FEATURES_PATH}")
+    FEATURES_DF = None
+except Exception as e:
+    logger.error(f"Failed to load features: {e}")
+    FEATURES_DF = None
 
-ALL_SYMBOLS = sorted(FEATURES_DF["Symbol"].unique().tolist())
+ALL_SYMBOLS = sorted(FEATURES_DF["Symbol"].unique().tolist()) if FEATURES_DF is not None else []
+logger.info(f"Loaded {len(ALL_SYMBOLS)} symbols")
+
 
 def safe_val(v):
+    """Convert values to safe JSON types, handling NaN and inf."""
     if pd.isna(v) or (isinstance(v, float) and np.isinf(v)):
         return None
     if isinstance(v, (np.integer,)):
@@ -61,6 +125,42 @@ def safe_val(v):
         return round(float(v), 4)
     return v
 
+
+# ════════════════════════════════════════════════════════════
+# ENDPOINT 0: GET /health
+# Health check endpoint for monitoring and uptime checks
+# ════════════════════════════════════════════════════════════
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    environment: str
+    model_loaded: bool
+    features_loaded: bool
+    symbols_count: int
+
+
+@app.get("/health", response_model=HealthResponse)
+def health_check():
+    """
+    Health check endpoint.
+    Returns status and component health info for monitoring.
+    """
+    return HealthResponse(
+        status="healthy" if MODEL and FEATURES_DF is not None else "degraded",
+        version=settings.api_version,
+        environment=settings.env,
+        model_loaded=MODEL is not None,
+        features_loaded=FEATURES_DF is not None,
+        symbols_count=len(ALL_SYMBOLS),
+    )
+
+
+# ════════════════════════════════════════════════════════════
+# ENDPOINT 1: GET /api/stocks
+# Returns all stocks above confidence threshold, ranked
+# ════════════════════════════════════════════════════════════
 @app.get("/api/stocks")
 def get_stocks():
     results = []
