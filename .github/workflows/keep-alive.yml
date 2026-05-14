@@ -1,9 +1,10 @@
 name: Keep Repo Active
 
-# Ping repo every 2 hours to keep scheduled workflows active
+# Ping repo weekly to keep scheduled workflows active
+# GitHub disables scheduled workflows after 60 days of inactivity
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Every 2 hours
+    - cron: '0 6 * * 1'  # Every Monday at 6:00 AM UTC
   workflow_dispatch:
 
 permissions:
@@ -16,11 +17,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Update timestamp file
+      - name: Keep alive if needed
         run: |
-          date > .github/last-activity.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/last-activity.txt
-          git commit -m "chore: keep repo active for scheduled workflows" || true
-          git push || true
+          # Only create a keep-alive commit if the last real commit
+          # was more than 50 days ago (GitHub disables at 60 days)
+          LAST_COMMIT_DAYS=$(( ($(date +%s) - $(git log -1 --format=%ct)) / 86400 ))
+          echo "Days since last commit: $LAST_COMMIT_DAYS"
+          if [ "$LAST_COMMIT_DAYS" -gt 50 ]; then
+            date > .github/last-activity.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/last-activity.txt
+            git commit -m "chore: keep repo active for scheduled workflows" || true
+            git push || true
+            echo "Keep-alive commit created"
+          else
+            echo "Repo is active, no keep-alive needed"
+          fi

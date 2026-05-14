@@ -15,8 +15,9 @@ import pandas as pd
 import numpy as np
 import os
 import json
+import pickle
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
 
 from xgboost import XGBClassifier
@@ -119,7 +120,6 @@ for f in FOLDS:
     })
 
     # Save SELL model
-    import pickle
     model_dir = os.path.join(PROCESSED_DIR, "models")
     os.makedirs(model_dir, exist_ok=True)
     

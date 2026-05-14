@@ -9,27 +9,7 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_clean.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
-def per_stock(func, df):
-    """Apply func to each stock's data separately, then recombine."""
-    if "Symbol" not in df.columns:
-        if isinstance(df.index, pd.MultiIndex) and "Symbol" in df.index.names:
-            df = df.reset_index(level="Symbol")
-        elif df.index.name == "Symbol":
-            df = df.reset_index()
-        else:
-            raise KeyError("'Symbol' not found as column or index level")
-
-    result = df.groupby("Symbol", group_keys=False).apply(
-        lambda g: func(g).assign(Symbol=g.name)
-    )
-
-    if "Symbol" not in result.columns:
-        if isinstance(result.index, pd.MultiIndex) and "Symbol" in result.index.names:
-            result = result.reset_index(level="Symbol")
-        elif result.index.name == "Symbol":
-            result = result.reset_index()
-
-    return result
+from utils import per_stock
 
 def add_momentum_features(g):
     g["RSI_dist_50"]   = g["RSI_14"] - 50
@@ -72,7 +52,7 @@ def add_return_features(g):
     g["Ret_5d"]  = g["Log_Return"].rolling(5).sum()
     g["Ret_10d"] = g["Log_Return"].rolling(10).sum()
     g["Ret_20d"] = g["Log_Return"].rolling(20).sum()
-    g["Ret_momentum"] = g["Ret_3d"] - g["Ret_10d"] / 2
+    g["Ret_momentum"] = (g["Ret_3d"] - g["Ret_10d"]) / 2
     return g
 
 df = per_stock(add_return_features, df)

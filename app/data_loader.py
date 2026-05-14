@@ -88,7 +88,7 @@ class DataLoader:
                     bundle = pickle.load(f)
                     self.model_buy = bundle["model"]
                     self.scaler_buy = bundle["scaler"]
-                    self.feature_cols = bundle.get("feature_cols") or self.config.get("feature_cols")
+                    self.feature_cols = bundle.get("feature_cols") or bundle.get("features") or self.config.get("feature_cols")
                 
                 if not self.feature_cols:
                     logger.warning("feature_cols missing in both model bundle and fold_config.json")

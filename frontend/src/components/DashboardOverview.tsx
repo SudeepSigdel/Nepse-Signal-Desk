@@ -309,12 +309,6 @@ function KpiRow({ label, value, highlight }: { label: string, value: number, hig
   )
 }
 
-function TierBadge({ tier }: { tier: string }) {
-  if (tier === 'High') return <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-status-green text-status-green border">High</span>
-  if (tier === 'Medium') return <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-status-amber text-status-amber border">Medium</span>
-  return <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-white/10 text-neutral-300 border border-white/10">Low/Neutral</span>
-}
-
 function VerdictBadge({ verdict }: { verdict: string }) {
   switch (verdict) {
     case 'BUY':
@@ -328,12 +322,6 @@ function VerdictBadge({ verdict }: { verdict: string }) {
     default:
       return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-gray-500/20 text-gray-400 border border-gray-400/30">⚪ HOLD</span>
   }
-}
-
-function getConfidenceColor(confidence: number) {
-  if (confidence >= 0.7) return '#10b981' // emerald
-  if (confidence >= 0.5) return '#f59e0b' // amber
-  return '#ef4444' // red
 }
 
 function getVerdictColor(verdict: string): string {

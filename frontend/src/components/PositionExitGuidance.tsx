@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-interface ExitStatus {
+export interface ExitStatus {
   should_exit: boolean;
   reason?: string;
   exit_type?: 'time_based' | 'stop_loss' | 'signal_decay';

@@ -26,14 +26,14 @@ export interface Stock {
 }
 
 export interface ApiStock {
-  Symbol: string
-  Date: string
-  Close: number | null
+  symbol: string
+  date: string
+  close: number | null
   rsi?: number | null
   confidence: number
   buy_confidence?: number
   sell_confidence?: number | null
-  Tier: string
+  tier: string
   verdict?: string
 }
 
@@ -43,14 +43,14 @@ export interface StockResponse {
 }
 
 const normalizeStock = (stock: ApiStock): Stock => ({
-  symbol: stock.Symbol,
-  date: stock.Date,
-  close: stock.Close ?? 0,
+  symbol: stock.symbol,
+  date: stock.date,
+  close: stock.close ?? 0,
   rsi: stock.rsi ?? null,
   confidence: stock.confidence,
   buy_confidence: stock.buy_confidence ?? stock.confidence,
   sell_confidence: stock.sell_confidence ?? null,
-  tier: stock.Tier,
+  tier: stock.tier,
   verdict: stock.verdict,
 })
 
@@ -189,7 +189,8 @@ export interface SignalDetail {
   symbol: string
   date: string
   close: number
-  confidence: number
+  buy_confidence: number
+  sell_confidence: number | null
   verdict: string
   verdict_color: string
   description: string
@@ -208,8 +209,9 @@ export interface SignalDetail {
     volume_note: string
   }
   thresholds: {
-    recommended: number
-    minimum: number
+    buy_high: number
+    buy_medium: number
+    buy_low: number
   }
 }
 

@@ -1,21 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { APP_TITLE } from '../config'
+import { APP_TITLE, API_BASE_URL } from '../config'
 import { useSignal, useStockDetail } from '../hooks/useStocks'
 import StockChart from './StockChart'
 import { SignalCard } from './SignalCard'
-import { PositionExitGuidance } from './PositionExitGuidance'
-
-interface ExitStatus {
-  should_exit: boolean;
-  reason?: string;
-  exit_type?: 'time_based' | 'stop_loss' | 'signal_decay';
-  days_held: number;
-  days_remaining: number;
-  current_return_pct: number;
-  distance_to_stop_loss_pct: number;
-  risks: string[];
-}
+import { PositionExitGuidance, type ExitStatus } from './PositionExitGuidance'
 
 export default function StockDetailPage() {
   const { symbol = '' } = useParams()
@@ -35,19 +24,12 @@ export default function StockDetailPage() {
   const latestRsi = detail?.indicators.rsi.at(-1) ?? null
   const latestMacd = detail?.indicators.macd.at(-1) ?? null
 
-  // Check exit status when position details change
-  React.useEffect(() => {
-    if (userEntryDate && userEntryPrice && latestClose && signal?.confidence) {
-      checkExitStatus()
-    }
-  }, [userEntryDate, userEntryPrice, latestClose, signal?.confidence])
-
-  const checkExitStatus = async () => {
-    if (!userEntryDate || !userEntryPrice || !latestClose || !signal?.confidence) return
+  const checkExitStatus = useCallback(async () => {
+    if (!userEntryDate || !userEntryPrice || !latestClose || !signal?.buy_confidence) return
     
     setExitLoading(true)
     try {
-      const response = await fetch('/api/positions/exit-check', {
+      const response = await fetch(`${API_BASE_URL}/api/positions/exit-check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,7 +37,7 @@ export default function StockDetailPage() {
           entry_date: userEntryDate,
           entry_price: userEntryPrice,
           current_price: latestClose,
-          current_buy_conf: signal.confidence
+          current_buy_conf: signal.buy_confidence
         })
       })
       
@@ -70,7 +52,14 @@ export default function StockDetailPage() {
     } finally {
       setExitLoading(false)
     }
-  }
+  }, [userEntryDate, userEntryPrice, latestClose, signal?.buy_confidence, symbol])
+
+  // Check exit status when position details change
+  React.useEffect(() => {
+    if (userEntryDate && userEntryPrice && latestClose && signal?.buy_confidence) {
+      checkExitStatus()
+    }
+  }, [checkExitStatus, userEntryDate, userEntryPrice, latestClose, signal?.buy_confidence])
 
   return (
     <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
@@ -122,7 +111,8 @@ export default function StockDetailPage() {
               <SignalCard 
                 verdict={signal.verdict}
                 verdict_color={signal.verdict_color}
-                confidence={signal.confidence}
+                buy_confidence={signal.buy_confidence}
+                sell_confidence={signal.sell_confidence}
                 description={signal.description}
                 active_signals={signal.active_signals}
                 close={latestClose ?? undefined}

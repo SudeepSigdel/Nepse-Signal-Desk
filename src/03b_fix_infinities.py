@@ -10,27 +10,7 @@ df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_features.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
 
-def per_stock(func, df):
-    """Apply func per symbol and keep Symbol available as a normal column."""
-    if "Symbol" not in df.columns:
-        if isinstance(df.index, pd.MultiIndex) and "Symbol" in df.index.names:
-            df = df.reset_index(level="Symbol")
-        elif df.index.name == "Symbol":
-            df = df.reset_index()
-        else:
-            raise KeyError("'Symbol' not found as column or index level")
-
-    out = df.groupby("Symbol", group_keys=False).apply(
-        lambda g: func(g).assign(Symbol=g.name)
-    )
-
-    if "Symbol" not in out.columns:
-        if isinstance(out.index, pd.MultiIndex) and "Symbol" in out.index.names:
-            out = out.reset_index(level="Symbol")
-        elif out.index.name == "Symbol":
-            out = out.reset_index()
-
-    return out
+from utils import per_stock
 
 
 
@@ -76,7 +56,7 @@ def recalc_features(g):
     g["Ret_5d"]  = g["Log_Return"].rolling(5).sum()
     g["Ret_10d"] = g["Log_Return"].rolling(10).sum()
     g["Ret_20d"] = g["Log_Return"].rolling(20).sum()
-    g["Ret_momentum"] = g["Ret_3d"] - g["Ret_10d"] / 2
+    g["Ret_momentum"] = (g["Ret_3d"] - g["Ret_10d"]) / 2
 
     return g
 

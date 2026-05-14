@@ -3,6 +3,8 @@ NEPSE AI Signals API - Main entry point.
 Routes are imported from the routes module for clean organization.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,11 +21,26 @@ logger.info(f"Starting NEPSE AI Signals API v{settings.api_version}")
 logger.info(f"Environment: {settings.env}")
 logger.info(f"Debug: {settings.debug}")
 
+
+# ─── Lifespan (replaces deprecated on_event) ───────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize data loader on app startup."""
+    loader = DataLoader()
+    if loader.is_ready():
+        logger.info("✓ All data loaded successfully")
+    else:
+        logger.warning("⚠ Some data failed to load (degraded mode)")
+    yield
+    # Cleanup (if needed) goes here
+
+
 # ─── Create FastAPI app ─────────────────────────────────────
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 # ─── Add CORS middleware ───────────────────────────────────
@@ -35,16 +52,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# ─── Initialize data on startup ────────────────────────────
-@app.on_event("startup")
-async def startup_event():
-    """Initialize data loader on app startup."""
-    loader = DataLoader()
-    if loader.is_ready():
-        logger.info("✓ All data loaded successfully")
-    else:
-        logger.warning("⚠ Some data failed to load (degraded mode)")
 
 # ─── Register routers ──────────────────────────────────────
 app.include_router(health_router)

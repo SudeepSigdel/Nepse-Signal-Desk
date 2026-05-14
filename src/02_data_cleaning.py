@@ -23,8 +23,8 @@ print(f"Removed SANVI: {before - after} rows dropped")
 print(f"Remaining stocks: {df['Symbol'].nunique()}")
 
 bnl_info = df[df["Symbol"] == "BNL"]
-print(f"\n BNL note: {len(bnl_info)} rows from")
-f"{bnl_info['Date'].min().date()} to {bnl_info['Date'].max().date()}"
+print(f"\n BNL note: {len(bnl_info)} rows from "
+      f"{bnl_info['Date'].min().date()} to {bnl_info['Date'].max().date()}")
 print(f"Average trading days per year: "
       f"{len(bnl_info)/13:.0f} (very low- normal NEPSE stocks trade ~250/year)")
 

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from sklearn.metrics import roc_curve, auc
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

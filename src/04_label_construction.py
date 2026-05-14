@@ -25,27 +25,7 @@ df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_features.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
 
-def per_stock(func, df):
-    """Apply func per symbol and keep Symbol available as a normal column."""
-    if "Symbol" not in df.columns:
-        if isinstance(df.index, pd.MultiIndex) and "Symbol" in df.index.names:
-            df = df.reset_index(level="Symbol")
-        elif df.index.name == "Symbol":
-            df = df.reset_index()
-        else:
-            raise KeyError("'Symbol' not found as column or index level")
-
-    out = df.groupby("Symbol", group_keys=False).apply(
-        lambda g: func(g).assign(Symbol=g.name)
-    )
-
-    if "Symbol" not in out.columns:
-        if isinstance(out.index, pd.MultiIndex) and "Symbol" in out.index.names:
-            out = out.reset_index(level="Symbol")
-        elif out.index.name == "Symbol":
-            out = out.reset_index()
-
-    return out
+from utils import per_stock
 
 
 def compute_forward_returns(g, horizons=[5, 10]):
@@ -170,9 +150,11 @@ for i, (ret_col, label_col, horizon) in enumerate([
     ax.legend(fontsize=9)
 
 plt.tight_layout()
-plt.savefig(os.path.join(PROCESSED_DIR, "label_distribution.png"), dpi=150)
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
+plt.savefig(os.path.join(OUTPUTS_DIR, "label_distribution.png"), dpi=150)
 plt.show()
-print(" Distribution chart saved")
+print(" Distribution chart saved to outputs/")
 
 rows_before = len(df)
 df_labeled = df.dropna(subset=["Label_5d", "Label_10d"]).copy()

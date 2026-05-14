@@ -1,14 +1,10 @@
-# Project Docs
+# Documentation
 
-This folder contains the active project documentation for the NEPSE signal platform.
+| Guide | Description |
+|---|---|
+| [architecture.md](architecture.md) | Signal system, models, thresholds, exit rules, data flow |
+| [deployment.md](deployment.md) | Local dev, Docker, Render, GitHub Actions CI/CD |
 
-## Guides
-- [Getting Started](getting-started.md)
-- [API and Deployment](api-deployment.md)
-- [Project Notes](project-notes.md)
-
-## Structure
-- `app/` contains the backend API.
-- `frontend/` contains the React dashboard.
-- `src/` contains the ML pipeline and reporting scripts.
-- `automation/` contains the scheduled pipeline scripts.
+For project setup and quick start, see the [root README](../README.md).  
+For frontend component details, see [frontend/README.md](../frontend/README.md).  
+For pipeline and automation, see [automation/README.md](../automation/README.md).
