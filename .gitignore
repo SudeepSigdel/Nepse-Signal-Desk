@@ -48,6 +48,9 @@ outputs/logs/
 .cache/
 .pytest_cache/
 
+# Pipeline locks
+.daily_pipeline.lock
+
 # Node / Frontend
 node_modules/
 frontend/dist/

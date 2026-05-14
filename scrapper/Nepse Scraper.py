@@ -18,8 +18,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-DEFAULT_RAW_DIR = r"C:\Users\sudee\projects\Final Year Project\data\raw"
-DEFAULT_PROCESSED_DIR = r"C:\Users\sudee\projects\Final Year Project\data\processed"
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_RAW_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
+DEFAULT_PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 DEFAULT_START_DATE = datetime(2020, 1, 1)
 DEFAULT_DELAY = 1.0
 WARMUP_DAYS = 60

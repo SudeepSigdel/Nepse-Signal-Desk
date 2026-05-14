@@ -33,17 +33,27 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Remove stale pipeline lock
+        run: |
+          rm -f data/processed/.daily_pipeline.lock
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python "scrapper/Nepse Scraper.py" --source sharesansar --delay 0.2
 
       - name: Run daily pipeline
         env:
           MPLBACKEND: Agg
           PYTHONUNBUFFERED: '1'
         run: |
-          python automation/daily_pipeline.py --source sharesansar --delay 0.2
+          python automation/daily_pipeline.py --source sharesansar --delay 0.2 --skip-scrape
 
       - name: Commit updated data
         if: success()
