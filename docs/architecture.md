@@ -45,16 +45,16 @@ Inference uses the **most recent fold** (fold 6, 0-indexed) — the model with t
 ### BUY Classifier (`model_fold*.pkl`)
 
 - **Target:** `Label_10d = 1` if `Fwd_ret_10d > 1%` (clears NEPSE round-trip transaction costs)
-- **Algorithm:** XGBoost (`n_estimators=300, max_depth=4, learning_rate=0.05`)
+- **Algorithm:** XGBoost by default, or Random Forest when `MODEL_FAMILY=rf`
 - **Features:** 24 engineered features (see Feature Engineering below)
-- **Saved as:** `data/processed/models/model_fold{0-6}.pkl`
+- **Saved as:** `data/processed/models/model_fold{0-6}.pkl` for XGBoost, `model_fold{0-6}_rf.pkl` for Random Forest
 - **Bundle keys:** `model`, `scaler`, `features`
 
 ### SELL Classifier (`model_fold*_sell.pkl`)
 
 - **Target:** `Label_10d_sell = 1` if `Fwd_ret_10d < -1%`
-- **Algorithm:** Same XGBoost config as BUY
-- **Saved as:** `data/processed/models/model_fold{0-6}_sell.pkl`
+- **Algorithm:** Same family as BUY (`MODEL_FAMILY=xgboost` or `rf`)
+- **Saved as:** `data/processed/models/model_fold{0-6}_sell.pkl` for XGBoost, `model_fold{0-6}_rf_sell.pkl` for Random Forest
 - **Optional:** If not present, system runs in BUY-only mode (SELL/WEAK_SELL verdicts not generated)
 
 ### Expected Performance
@@ -143,9 +143,9 @@ src/02  →  cleaned parquet  (all_stocks_clean.parquet)
 src/03  →  feature parquet  (all_stocks_features.parquet)
 src/04  →  labeled parquet  (all_stocks_labeled.parquet)
 src/05  →  fold config      (fold_config.json)
-src/06  →  BUY models       (data/processed/models/model_fold*.pkl)
-src/06b →  SELL models      (data/processed/models/model_fold*_sell.pkl)
-src/07  →  backtest results (outputs/backtest_*.csv)
+src/06  →  BUY models       (data/processed/models/model_fold*.pkl or model_fold*_rf.pkl)
+src/06b →  SELL models      (data/processed/models/model_fold*_sell.pkl or model_fold*_rf_sell.pkl)
+src/07  →  backtest results (outputs/strategy_metrics*.csv)
 src/08  →  reports + charts (outputs/*.png)
                ↓
 app/data_loader.py  →  loads latest fold model + features into memory

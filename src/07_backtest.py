@@ -14,9 +14,24 @@ PROB_THRESHOLD = 0.55    # Only trade when model is at least 55% confident
                          # This filters out low-confidence predictions
 HOLD_DAYS      = 10      # Days we hold each position
 
+
+def normalize_model_family(raw_family: str | None) -> str:
+    family = (raw_family or "xgboost").strip().lower().replace("-", "_")
+    if family in {"rf", "randomforest", "random_forest", "random forest"}:
+        return "random_forest"
+    return "xgboost"
+
+
+def family_suffix(family: str) -> str:
+    return "" if family == "xgboost" else "_rf"
+
+
+MODEL_FAMILY = normalize_model_family(os.getenv("MODEL_FAMILY"))
+MODEL_SUFFIX = family_suffix(MODEL_FAMILY)
+
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-preds = pd.read_parquet(os.path.join(PROCESSED_DIR, "oos_predictions.parquet"))
+preds = pd.read_parquet(os.path.join(PROCESSED_DIR, f"oos_predictions{MODEL_SUFFIX}.parquet"))
 preds["Date"] = pd.to_datetime(preds["Date"])
 preds = preds.sort_values(["Symbol", "Date"]).reset_index(drop=True)
 
@@ -196,12 +211,12 @@ ax2.legend()
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig(os.path.join(PROCESSED_DIR, "backtest_results.png"), dpi=150)
+plt.savefig(os.path.join(PROCESSED_DIR, f"backtest_results{MODEL_SUFFIX}.png"), dpi=150)
 plt.show()
 
-metrics_df.to_csv(os.path.join(OUTPUTS_DIR, "strategy_metrics.csv"))
-ml_trades.to_parquet(os.path.join(PROCESSED_DIR, "ml_trades.parquet"), index=False)
+metrics_df.to_csv(os.path.join(OUTPUTS_DIR, f"strategy_metrics{MODEL_SUFFIX}.csv"))
+ml_trades.to_parquet(os.path.join(PROCESSED_DIR, f"ml_trades{MODEL_SUFFIX}.parquet"), index=False)
 
-print(f"\n Saved strategy metrics → strategy_metrics.csv")
-print(f" Saved ML trades        → ml_trades.parquet")
+print(f"\n Saved strategy metrics → strategy_metrics{MODEL_SUFFIX}.csv")
+print(f" Saved ML trades        → ml_trades{MODEL_SUFFIX}.parquet")
 print(f"\n Backtesting complete! Next: reporting layer.")

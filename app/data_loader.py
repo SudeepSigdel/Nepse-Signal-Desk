@@ -20,6 +20,17 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _normalize_model_family(raw_family: Optional[str]) -> str:
+    family = (raw_family or "xgboost").strip().lower().replace("-", "_")
+    if family in {"rf", "randomforest", "random_forest", "random forest"}:
+        return "random_forest"
+    return "xgboost"
+
+
+def _family_suffix(family: str) -> str:
+    return "" if family == "xgboost" else "_rf"
+
+
 class DataLoader:
     """Loads and manages ML model, features, scaler, and configuration."""
     
@@ -43,6 +54,7 @@ class DataLoader:
         self.config = {}
         self.features_df = None
         self.all_symbols = []
+        self.model_family = _normalize_model_family(settings.model_family)
         
         self._load_all()
         self._initialized = True
@@ -71,17 +83,24 @@ class DataLoader:
     
     def _load_models(self):
         """Load both BUY and SELL models from model_fold*.pkl and model_fold*_sell.pkl files."""
-        # Load BUY model (latest fold without _sell suffix)
-        buy_candidates = glob.glob(str(settings.model_dir / "model_fold*.pkl"))
-        buy_candidates = [p for p in buy_candidates if not "_sell" in os.path.basename(p)]
+        suffix = _family_suffix(self.model_family)
+
+        # Load BUY model (latest fold for the selected family)
+        buy_pattern = f"model_fold*{suffix}.pkl"
+        buy_candidates = glob.glob(str(settings.model_dir / buy_pattern))
+        buy_candidates = [
+            p for p in buy_candidates
+            if "_sell" not in os.path.basename(p)
+            and (suffix or "_rf" not in os.path.basename(p))
+        ]
         
         if buy_candidates:
             def fold_num(path):
-                m = re.search(r"model_fold(\d+)\.pkl$", os.path.basename(path))
+                m = re.search(rf"model_fold(\d+){re.escape(suffix)}\.pkl$", os.path.basename(path))
                 return int(m.group(1)) if m else -1
             
             model_path = max(buy_candidates, key=fold_num)
-            logger.info(f"Loading BUY model from {model_path}")
+            logger.info(f"Loading BUY model ({self.model_family}) from {model_path}")
             
             try:
                 with open(model_path, "rb") as f:
@@ -99,18 +118,21 @@ class DataLoader:
                 self.model_buy = None
                 self.scaler_buy = None
         else:
-            logger.error(f"No BUY model files found in {settings.model_dir}")
+            logger.error(f"No BUY model files found in {settings.model_dir} for family {self.model_family}")
         
-        # Load SELL model (latest fold with _sell suffix)
-        sell_candidates = glob.glob(str(settings.model_dir / "model_fold*_sell.pkl"))
+        # Load SELL model (latest fold with _sell suffix and the selected family)
+        sell_pattern = f"model_fold*{suffix}_sell.pkl" if suffix else "model_fold*_sell.pkl"
+        sell_candidates = glob.glob(str(settings.model_dir / sell_pattern))
+        if not suffix:
+            sell_candidates = [p for p in sell_candidates if "_rf" not in os.path.basename(p)]
         
         if sell_candidates:
             def fold_num_sell(path):
-                m = re.search(r"model_fold(\d+)_sell\.pkl$", os.path.basename(path))
+                m = re.search(rf"model_fold(\d+){re.escape(suffix)}_sell\.pkl$", os.path.basename(path))
                 return int(m.group(1)) if m else -1
             
             model_path = max(sell_candidates, key=fold_num_sell)
-            logger.info(f"Loading SELL model from {model_path}")
+            logger.info(f"Loading SELL model ({self.model_family}) from {model_path}")
             
             try:
                 with open(model_path, "rb") as f:
@@ -123,7 +145,10 @@ class DataLoader:
                 self.model_sell = None
                 self.scaler_sell = None
         else:
-            logger.warning(f"No SELL model files found in {settings.model_dir} (optional - will use BUY only)")
+            logger.warning(
+                f"No SELL model files found in {settings.model_dir} for family {self.model_family} "
+                "(optional - will use BUY only)"
+            )
 
     
     def _load_features(self):

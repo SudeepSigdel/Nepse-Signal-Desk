@@ -8,6 +8,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
 
 from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, classification_report
 import matplotlib.pyplot as plt
@@ -28,6 +29,30 @@ FEATURE_COLS = config["feature_cols"]
 LABEL_COL    = config["label_col"]
 
 print(f"Loaded: {df.shape[0]:,} rows | {len(FEATURE_COLS)} features | label: {LABEL_COL}")
+
+
+def normalize_model_family(raw_family: str | None) -> str:
+    family = (raw_family or "xgboost").strip().lower().replace("-", "_")
+    if family in {"rf", "randomforest", "random_forest", "random forest"}:
+        return "random_forest"
+    return "xgboost"
+
+
+def family_suffix(family: str) -> str:
+    return "" if family == "xgboost" else "_rf"
+
+
+def build_model(family: str, params: dict):
+    if family == "random_forest":
+        return RandomForestClassifier(**params)
+    return XGBClassifier(**params, verbosity=0)
+
+
+MODEL_FAMILY = normalize_model_family(os.getenv("MODEL_FAMILY"))
+MODEL_SUFFIX = family_suffix(MODEL_FAMILY)
+MODEL_NAME = "Random Forest" if MODEL_FAMILY == "random_forest" else "XGBoost"
+
+print(f"Model family: {MODEL_NAME}")
 
 
 pos_count = (df[LABEL_COL] == 1).sum()
@@ -72,6 +97,19 @@ XGB_PARAMS = {
     "n_jobs":           -1,      # Use all CPU cores for speed
 }
 
+RF_PARAMS = {
+    "n_estimators": 400,
+    "max_depth": 12,
+    "min_samples_split": 10,
+    "min_samples_leaf": 5,
+    "max_features": "sqrt",
+    "class_weight": "balanced_subsample",
+    "random_state": 42,
+    "n_jobs": -1,
+}
+
+MODEL_PARAMS = XGB_PARAMS if MODEL_FAMILY == "xgboost" else RF_PARAMS
+
 
 
 all_predictions = []   # Will hold out-of-sample predictions from all folds
@@ -100,7 +138,7 @@ for f in FOLDS:
     X_train = scaler.fit_transform(X_train)   # fit + transform train
     X_test  = scaler.transform(X_test)        # transform test only
 
-    model = XGBClassifier(**XGB_PARAMS, verbosity=0)
+    model = build_model(MODEL_FAMILY, MODEL_PARAMS)
     model.fit(X_train, y_train)
 
     proba = model.predict_proba(X_test)[:, 1]
@@ -126,9 +164,10 @@ for f in FOLDS:
 
     model_dir = os.path.join(PROCESSED_DIR, "models")
     os.makedirs(model_dir, exist_ok=True)
-    with open(os.path.join(model_dir, f"model_fold{fold_num}.pkl"), "wb") as fp:
+    model_path = os.path.join(model_dir, f"model_fold{fold_num}{MODEL_SUFFIX}.pkl")
+    with open(model_path, "wb") as fp:
         pickle.dump({"model": model, "scaler": scaler,
-                     "features": FEATURE_COLS}, fp)
+                     "features": FEATURE_COLS, "family": MODEL_FAMILY}, fp)
 
 
 combined_preds = pd.concat(all_predictions, ignore_index=True)
@@ -167,7 +206,7 @@ print(classification_report(
 ))
 
 last_model = pickle.load(
-    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7.pkl"), "rb")
+    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7{MODEL_SUFFIX}.pkl"), "rb")
 )["model"]
 
 importances = pd.Series(
@@ -184,16 +223,16 @@ plt.title("Feature importance — Fold 7 model\n"
 plt.xlabel("Importance score")
 plt.legend()
 plt.tight_layout()
-plt.savefig(os.path.join(PROCESSED_DIR, "feature_importance.png"), dpi=150)
+plt.savefig(os.path.join(PROCESSED_DIR, f"feature_importance{MODEL_SUFFIX}.png"), dpi=150)
 plt.show()
 
 combined_preds.to_parquet(
-    os.path.join(PROCESSED_DIR, "oos_predictions.parquet"), index=False
+    os.path.join(PROCESSED_DIR, f"oos_predictions{MODEL_SUFFIX}.parquet"), index=False
 )
 
 metrics_df = pd.DataFrame(fold_metrics)
-metrics_df.to_csv(os.path.join(PROCESSED_DIR, "fold_metrics.csv"), index=False)
+metrics_df.to_csv(os.path.join(PROCESSED_DIR, f"fold_metrics{MODEL_SUFFIX}.csv"), index=False)
 
-print(f"\nSaved out-of-sample predictions → oos_predictions.parquet")
-print(f"Saved fold metrics              → fold_metrics.csv")
+print(f"\nSaved out-of-sample predictions → oos_predictions{MODEL_SUFFIX}.parquet")
+print(f"Saved fold metrics              → fold_metrics{MODEL_SUFFIX}.csv")
 print(f"\nModel training complete! Next: backtesting with transaction costs.")

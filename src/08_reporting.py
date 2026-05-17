@@ -16,10 +16,25 @@ REPORT_DIR = PROCESSED_DIR / "report"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 
-preds   = pd.read_parquet(os.path.join(PROCESSED_DIR, "oos_predictions.parquet"))
+def normalize_model_family(raw_family: str | None) -> str:
+    family = (raw_family or "xgboost").strip().lower().replace("-", "_")
+    if family in {"rf", "randomforest", "random_forest", "random forest"}:
+        return "random_forest"
+    return "xgboost"
+
+
+def family_suffix(family: str) -> str:
+    return "" if family == "xgboost" else "_rf"
+
+
+MODEL_FAMILY = normalize_model_family(os.getenv("MODEL_FAMILY"))
+MODEL_SUFFIX = family_suffix(MODEL_FAMILY)
+
+
+preds   = pd.read_parquet(os.path.join(PROCESSED_DIR, f"oos_predictions{MODEL_SUFFIX}.parquet"))
 preds["Date"] = pd.to_datetime(preds["Date"])
 
-ml_trades = pd.read_parquet(os.path.join(PROCESSED_DIR, "ml_trades.parquet"))
+ml_trades = pd.read_parquet(os.path.join(PROCESSED_DIR, f"ml_trades{MODEL_SUFFIX}.parquet"))
 
 with open(os.path.join(PROCESSED_DIR, "fold_config.json")) as fp:
     config = json.load(fp)
@@ -29,7 +44,7 @@ LABEL_COL     = config["label_col"]
 TRANS_COST    = 0.01
 
 fold7_bundle  = pickle.load(
-    open(os.path.join(PROCESSED_DIR, "models", "model_fold7.pkl"), "rb")
+    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7{MODEL_SUFFIX}.pkl"), "rb")
 )
 model   = fold7_bundle["model"]
 scaler  = fold7_bundle["scaler"]
@@ -66,7 +81,7 @@ ax.grid(True, alpha=0.3)
 ax.set_xlim([0,1]); ax.set_ylim([0,1]) #type: ignore
 
 plt.tight_layout()
-plt.savefig(os.path.join(REPORT_DIR, "fig1_roc_curves.png"), dpi=150)
+plt.savefig(os.path.join(REPORT_DIR, f"fig1_roc_curves{MODEL_SUFFIX}.png"), dpi=150)
 plt.close()
 print(" Figure 1: ROC curves saved")
 
@@ -124,7 +139,7 @@ axes[1,1].grid(True, alpha=0.3)
 plt.suptitle("Threshold Sensitivity Analysis\n"
              "Higher threshold = fewer but better-quality trades", fontsize=13)
 plt.tight_layout()
-plt.savefig(os.path.join(REPORT_DIR, "fig2_threshold_analysis.png"), dpi=150)
+plt.savefig(os.path.join(REPORT_DIR, f"fig2_threshold_analysis{MODEL_SUFFIX}.png"), dpi=150)
 plt.close()
 print(" Figure 2: Threshold analysis saved")
 
@@ -187,7 +202,7 @@ legend_items = [
 ax.legend(handles=legend_items, fontsize=8, loc="lower right")
 
 plt.tight_layout()
-plt.savefig(os.path.join(REPORT_DIR, "fig3_feature_importance.png"), dpi=150)
+plt.savefig(os.path.join(REPORT_DIR, f"fig3_feature_importance{MODEL_SUFFIX}.png"), dpi=150)
 plt.close()
 print(" Figure 3: Feature importance saved")
 
@@ -240,7 +255,7 @@ ax2.legend(fontsize=9); ax2.grid(True, alpha=0.3)
 plt.suptitle("Walk-Forward Performance by Year\n"
              "Red = poor, Orange = marginal, Green = good", fontsize=13)
 plt.tight_layout()
-plt.savefig(os.path.join(REPORT_DIR, "fig4_fold_performance.png"), dpi=150)
+plt.savefig(os.path.join(REPORT_DIR, f"fig4_fold_performance{MODEL_SUFFIX}.png"), dpi=150)
 plt.close()
 print(" Figure 4: Fold performance saved")
 
@@ -353,17 +368,17 @@ for low, high, label in [(0.0,0.45,"Low (<0.45)"),
     print(f"  {label:<25}: {count:>3} stocks")
 
 
-summary_df.to_csv(os.path.join(REPORT_DIR, "summary_table.csv"), index=False)
+summary_df.to_csv(os.path.join(REPORT_DIR, f"summary_table{MODEL_SUFFIX}.csv"), index=False)
 latest_clean[["Symbol","Date","Close","RSI_14","MACD",
               "BB_pctB","Volume_ratio","ML_confidence",
               "Active_signals"]].to_csv(
-    os.path.join(REPORT_DIR, "latest_signals.csv"), index=False)
+    os.path.join(REPORT_DIR, f"latest_signals{MODEL_SUFFIX}.csv"), index=False)
 
 print(f"\n Report figures saved to: {REPORT_DIR}")
-print(f"   fig1_roc_curves.png")
-print(f"   fig2_threshold_analysis.png")
-print(f"   fig3_feature_importance.png")
-print(f"   fig4_fold_performance.png")
-print(f"   summary_table.csv")
-print(f"   latest_signals.csv")
+print(f"   fig1_roc_curves{MODEL_SUFFIX}.png")
+print(f"   fig2_threshold_analysis{MODEL_SUFFIX}.png")
+print(f"   fig3_feature_importance{MODEL_SUFFIX}.png")
+print(f"   fig4_fold_performance{MODEL_SUFFIX}.png")
+print(f"   summary_table{MODEL_SUFFIX}.csv")
+print(f"   latest_signals{MODEL_SUFFIX}.csv")
 print(f"\n All steps complete. Your project pipeline is fully built.")

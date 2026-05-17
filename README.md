@@ -13,16 +13,18 @@ Daily scrape (Sharesansar / Merolagani)
     ↓
 Data audit → cleaning → feature engineering → label construction
     ↓
-Walk-forward training (7 folds, XGBoost) — BUY model + SELL model
+Walk-forward training (7 folds, XGBoost or Random Forest) — BUY model + SELL model
     ↓
 Backtest → reporting
     ↓
 FastAPI serves signals  →  React dashboard
 ```
 
-The system uses two separate XGBoost classifiers:
+The system uses two separate classifiers, selected with `MODEL_FAMILY`:
 - **BUY model** — P(stock goes up >1% in 10 days)
 - **SELL model** — P(stock goes down >1% in 10 days)
+
+Set `MODEL_FAMILY=rf` to train and load Random Forest models instead of XGBoost.
 
 Combined, they produce a 5-level verdict: **BUY → MODERATE → HOLD → WEAK_SELL → SELL**
 
@@ -177,6 +179,8 @@ python 06b_train_sell_model.py  # SELL model
 python 07_backtest.py
 python 08_reporting.py
 ```
+
+To switch the pipeline to Random Forest, set `MODEL_FAMILY=rf` before running the training and evaluation scripts.
 
 ---
 

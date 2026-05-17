@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     enable_user_alerts: bool = False
     enable_explainability: bool = False
 
+    # ─── ML Model Family ────────────────────────────────────
+    # xgboost (default) keeps the current behaviour.
+    # random_forest switches the pipeline to sklearn's RandomForestClassifier.
+    model_family: str = "xgboost"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

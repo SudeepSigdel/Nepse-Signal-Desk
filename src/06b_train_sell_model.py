@@ -21,6 +21,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
 
 from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, classification_report
 import matplotlib.pyplot as plt
@@ -47,6 +48,30 @@ if LABEL_COL not in df.columns:
 print(f"Loaded: {df.shape[0]:,} rows | {len(FEATURE_COLS)} features | label: {LABEL_COL}")
 
 
+def normalize_model_family(raw_family: str | None) -> str:
+    family = (raw_family or "xgboost").strip().lower().replace("-", "_")
+    if family in {"rf", "randomforest", "random_forest", "random forest"}:
+        return "random_forest"
+    return "xgboost"
+
+
+def family_suffix(family: str) -> str:
+    return "" if family == "xgboost" else "_rf"
+
+
+def build_model(family: str, params: dict):
+    if family == "random_forest":
+        return RandomForestClassifier(**params)
+    return XGBClassifier(**params, verbosity=0)
+
+
+MODEL_FAMILY = normalize_model_family(os.getenv("MODEL_FAMILY"))
+MODEL_SUFFIX = family_suffix(MODEL_FAMILY)
+MODEL_NAME = "Random Forest" if MODEL_FAMILY == "random_forest" else "XGBoost"
+
+print(f"Model family: {MODEL_NAME}")
+
+
 pos_count = (df[LABEL_COL] == 1).sum()
 neg_count = (df[LABEL_COL] == 0).sum()
 spw = round(neg_count / pos_count, 2)
@@ -68,6 +93,19 @@ XGB_PARAMS = {
     "random_state":      42,
     "n_jobs":           -1,
 }
+
+RF_PARAMS = {
+    "n_estimators": 400,
+    "max_depth": 12,
+    "min_samples_split": 10,
+    "min_samples_leaf": 5,
+    "max_features": "sqrt",
+    "class_weight": "balanced_subsample",
+    "random_state": 42,
+    "n_jobs": -1,
+}
+
+MODEL_PARAMS = XGB_PARAMS if MODEL_FAMILY == "xgboost" else RF_PARAMS
 
 
 all_predictions = []
@@ -96,7 +134,7 @@ for f in FOLDS:
     X_train = scaler.fit_transform(X_train)
     X_test  = scaler.transform(X_test)
 
-    model = XGBClassifier(**XGB_PARAMS, verbosity=0)
+    model = build_model(MODEL_FAMILY, MODEL_PARAMS)
     model.fit(X_train, y_train)
 
     proba = model.predict_proba(X_test)[:, 1]
@@ -124,10 +162,10 @@ for f in FOLDS:
     os.makedirs(model_dir, exist_ok=True)
     
     # Save with _sell suffix to distinguish from BUY models
-    with open(os.path.join(model_dir, f"model_fold{fold_num}_sell.pkl"), "wb") as fp:
+    with open(os.path.join(model_dir, f"model_fold{fold_num}{MODEL_SUFFIX}_sell.pkl"), "wb") as fp:
         pickle.dump({"model": model, "scaler": scaler,
-                     "features": FEATURE_COLS}, fp)
-    print(f"         → Saved: model_fold{fold_num}_sell.pkl")
+                     "features": FEATURE_COLS, "family": MODEL_FAMILY}, fp)
+    print(f"         → Saved: model_fold{fold_num}{MODEL_SUFFIX}_sell.pkl")
 
 
 combined_preds = pd.concat(all_predictions, ignore_index=True)
@@ -167,7 +205,7 @@ print(classification_report(
 
 # Feature importance visualization (using last fold)
 last_model = pickle.load(
-    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7_sell.pkl"), "rb")
+    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7{MODEL_SUFFIX}_sell.pkl"), "rb")
 )["model"]
 
 importances = pd.Series(
@@ -184,18 +222,18 @@ plt.title("Feature importance — SELL Classifier (Fold 7)\n"
 plt.xlabel("Importance score")
 plt.legend()
 plt.tight_layout()
-plt.savefig(os.path.join(PROCESSED_DIR, "feature_importance_sell.png"), dpi=150)
+plt.savefig(os.path.join(PROCESSED_DIR, f"feature_importance{MODEL_SUFFIX}_sell.png"), dpi=150)
 plt.show()
 
 # Save results
 combined_preds.to_parquet(
-    os.path.join(PROCESSED_DIR, "oos_predictions_sell.parquet"), index=False
+    os.path.join(PROCESSED_DIR, f"oos_predictions{MODEL_SUFFIX}_sell.parquet"), index=False
 )
 
 metrics_df = pd.DataFrame(fold_metrics)
-metrics_df.to_csv(os.path.join(PROCESSED_DIR, "fold_metrics_sell.csv"), index=False)
+metrics_df.to_csv(os.path.join(PROCESSED_DIR, f"fold_metrics{MODEL_SUFFIX}_sell.csv"), index=False)
 
-print(f"\nSaved out-of-sample predictions → oos_predictions_sell.parquet")
-print(f"Saved fold metrics              → fold_metrics_sell.csv")
+print(f"\nSaved out-of-sample predictions → oos_predictions{MODEL_SUFFIX}_sell.parquet")
+print(f"Saved fold metrics              → fold_metrics{MODEL_SUFFIX}_sell.csv")
 print(f"\n✓ SELL Classifier training complete!")
-print(f"  All 7 models saved: model_fold*_sell.pkl")
+print(f"  All 7 models saved: model_fold*{MODEL_SUFFIX}_sell.pkl")
