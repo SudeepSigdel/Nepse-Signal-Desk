@@ -92,6 +92,10 @@ def health_check():
 
 import os
 import glob
+import pandas as pd
+import pickle
+import traceback
+
 @health_router.get("/debug")
 def debug_info():
     loader = DataLoader()
@@ -99,28 +103,26 @@ def debug_info():
     data_dir = str(settings.data_processed_dir)
     models_dir = str(settings.model_dir)
     
+    parquet_err = "OK"
+    model_err = "OK"
+    
     try:
-        data_files = os.listdir(data_dir) if os.path.exists(data_dir) else ["DIR_NOT_FOUND"]
+        df = pd.read_parquet(os.path.join(data_dir, "all_stocks_features.parquet"))
     except Exception as e:
-        data_files = [str(e)]
+        parquet_err = traceback.format_exc()
         
     try:
-        model_files = os.listdir(models_dir) if os.path.exists(models_dir) else ["DIR_NOT_FOUND"]
+        with open(os.path.join(models_dir, "model_latest_rf.pkl"), "rb") as f:
+            bundle = pickle.load(f)
     except Exception as e:
-        model_files = [str(e)]
+        model_err = traceback.format_exc()
         
     return {
         "is_ready": loader.is_ready(),
-        "model_buy_loaded": loader.model_buy is not None,
-        "scaler_buy_loaded": loader.scaler_buy is not None,
-        "features_df_loaded": loader.features_df is not None,
-        "symbols_count": len(loader.all_symbols),
-        "data_dir_exists": os.path.exists(data_dir),
-        "models_dir_exists": os.path.exists(models_dir),
-        "data_files": data_files,
-        "model_files": model_files,
-        "model_family": loader.model_family,
-        "buy_pattern": f"model_fold*_{loader.model_family}.pkl"
+        "parquet_error": parquet_err,
+        "model_error": model_err,
+        "data_files": os.listdir(data_dir) if os.path.exists(data_dir) else [],
+        "model_files": os.listdir(models_dir) if os.path.exists(models_dir) else []
     }
 
 
