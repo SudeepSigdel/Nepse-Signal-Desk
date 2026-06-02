@@ -24,7 +24,7 @@ export function readStoredModelFamily(): ModelFamily {
   } catch {
     // Storage can fail in private or restricted browser contexts.
   }
-  return 'xgboost'
+  return 'random_forest'
 }
 
 export function writeStoredModelFamily(value: ModelFamily) {

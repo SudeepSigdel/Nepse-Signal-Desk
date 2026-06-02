@@ -8,11 +8,13 @@ import ModelSelector from './ModelSelector'
 import StockChart from './StockChart'
 import { SignalCard } from './SignalCard'
 import { PositionExitGuidance, type ExitStatus } from './PositionExitGuidance'
+import { useTheme } from '../hooks/useTheme'
 
 export default function StockDetailPage() {
   const { symbol = '' } = useParams()
   const navigate = useNavigate()
   const [familySelection, setFamilySelection] = useModelFamily()
+  const { toggleTheme, isDark } = useTheme()
   const { detail, loading: detailLoading, error: detailError } = useStockDetail(symbol)
   const { signal, loading: signalLoading, error: signalError } = useSignal(symbol, familySelection)
 
@@ -89,33 +91,52 @@ export default function StockDetailPage() {
   }, [checkExitStatus, userEntryDate, userEntryPrice, latestClose, signal?.buy_confidence])
 
   return (
-    <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
-      <nav className="w-full sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
-        <div className="w-full max-w-7xl pl-8 pr-4 md:pl-16 lg:pl-24">
+    <div className="w-full min-h-screen page-fade-in soft-grid pb-20 bg-transparent">
+      <nav className="sticky top-0 z-50 w-full border-b border-black/5 dark:border-white/10 bg-[var(--nav-bg)] backdrop-blur-md transition-colors duration-300">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center gap-4">
             <button 
               onClick={() => navigate('/')}
-              className="p-2 -ml-2 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition-colors"
+              className="-ml-2 rounded-full border border-black/8 dark:border-white/8 bg-black/[0.02] dark:bg-white/[0.02] p-2 text-slate-500 dark:text-neutral-300 transition hover:border-black/16 dark:hover:border-white/16 hover:bg-black/[0.06] dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
               aria-label="Back to dashboard"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
             </button>
-            <div className="h-4 w-[1px] bg-white/10 hidden sm:block"></div>
-            <div className="font-display font-semibold text-white tracking-tight text-lg">
-              {symbol.toUpperCase()} <span className="text-neutral-500 font-normal">| Research</span>
+            <div className="h-4 w-[1px] bg-black/10 dark:bg-white/10 hidden sm:block"></div>
+            <div className="min-w-0 truncate font-display text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+              {symbol.toUpperCase()} <span className="font-normal text-slate-500 dark:text-neutral-400">Research</span>
             </div>
-            <div className="ml-auto hidden md:block">
+            
+            <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
               <ModelSelector value={familySelection} onChange={setFamilySelection} />
+              
+              <button
+                onClick={toggleTheme}
+                type="button"
+                className="p-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.06] transition-all"
+                aria-label="Toggle theme"
+                title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
+                {isDark ? (
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 9h-1m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="w-full max-w-7xl pl-8 pr-4 pt-8 md:pl-16 lg:pl-24">
+      <main className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
         {error && (
-          <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-200">
+          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-200">
             <p className="font-medium">Error loading data</p>
             <p className="mt-1 text-sm opacity-80">{error}</p>
           </div>
@@ -129,7 +150,7 @@ export default function StockDetailPage() {
           <div className="space-y-6">
             
             {/* Top Stats Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-in">
+            <div className="grid grid-cols-2 gap-4 stagger-in lg:grid-cols-4">
               <MetricCard label="Latest Close" value={formatNumber(latestClose)} tooltip="Current stock price" />
               <MetricCard label="RSI (14)" value={formatNumber(latestRsi)} tooltip="Measures momentum: <30=Oversold, >70=Overbought" />
               <MetricCard label="MACD" value={formatNumber(latestMacd)} tooltip="Trend direction indicator" />
@@ -155,13 +176,13 @@ export default function StockDetailPage() {
                   {bothSignals.xgboost && (
                     <div className="comparison-tile">
                       <span>XGBoost buy</span>
-                      <strong>{(bothSignals.xgboost.buy_confidence * 100).toFixed(1)}%</strong>
+                      <strong className="text-slate-900 dark:text-white">{(bothSignals.xgboost.buy_confidence * 100).toFixed(1)}%</strong>
                     </div>
                   )}
                   {bothSignals.random_forest && (
                     <div className="comparison-tile">
                       <span>Random Forest buy</span>
-                      <strong>{(bothSignals.random_forest.buy_confidence * 100).toFixed(1)}%</strong>
+                      <strong className="text-slate-900 dark:text-white">{(bothSignals.random_forest.buy_confidence * 100).toFixed(1)}%</strong>
                     </div>
                   )}
                 </div>
@@ -170,26 +191,26 @@ export default function StockDetailPage() {
 
             {/* Your Position Input */}
             <div className="surface-panel p-5 stagger-in">
-              <h3 className="mb-4 flex items-center gap-2 font-semibold text-white">
-                💼 Track Your Position
+              <h3 className="mb-2 font-display text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Track your position
               </h3>
-              <p className="text-neutral-400 text-sm mb-4">
+              <p className="mb-4 text-sm text-slate-500 dark:text-neutral-400">
                 Enter your entry date and price to get exit guidance
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-400 mb-2">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-neutral-400">
                     Entry Date
                   </label>
                   <input
                     type="date"
                     value={userEntryDate}
                     onChange={(e) => setUserEntryDate(e.target.value)}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition"
+                    className="control-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-400 mb-2">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-neutral-400">
                     Entry Price
                   </label>
                   <input
@@ -197,14 +218,14 @@ export default function StockDetailPage() {
                     placeholder="100.50"
                     value={userEntryPrice || ''}
                     onChange={(e) => setUserEntryPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-white placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition"
+                    className="control-field"
                   />
                 </div>
                 <div className="flex items-end">
                   <button
                     onClick={checkExitStatus}
                     disabled={!userEntryDate || !userEntryPrice || exitLoading}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-semibold transition"
+                    className="primary-action w-full disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {exitLoading ? '...' : 'Check Status'}
                   </button>
@@ -241,17 +262,17 @@ function MetricCard({ label, value, tooltip }: { label: string, value: string, t
   
   return (
     <div 
-      className="glass-panel rounded-xl p-5 relative group cursor-help"
+      className="glass-panel relative cursor-help rounded-2xl p-5 group"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-2">{label}</div>
-      <div className="font-display text-2xl font-semibold text-white">{value}</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-neutral-500">{label}</div>
+      <div className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{value}</div>
       
       {tooltip && showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-xs text-neutral-300 whitespace-nowrap z-10 shadow-lg">
+        <div className="absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-black/10 dark:border-white/10 bg-slate-900 dark:bg-[#11151d] px-3 py-2 text-xs text-white dark:text-neutral-300 shadow-lg">
           {tooltip}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-neutral-900"></div>
+          <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-[#11151d]"></div>
         </div>
       )}
     </div>

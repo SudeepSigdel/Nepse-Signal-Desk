@@ -1,0 +1,36 @@
+# Keep the backend Docker build context intentionally small.
+# The FastAPI app only needs runtime code, dependencies, latest model bundles,
+# and the feature parquet used by DataLoader.
+
+*
+
+!Dockerfile
+!requirements.txt
+
+!app/
+!app/**
+
+!data/
+!data/processed/
+!data/processed/all_stocks_features.parquet
+!data/processed/fold_config.json
+!data/processed/models/
+!data/processed/models/model_fold7.pkl
+!data/processed/models/model_fold7_sell.pkl
+!data/processed/models/model_fold7_rf.pkl
+!data/processed/models/model_fold7_rf_sell.pkl
+
+# Explicitly keep generated research/training artifacts and non-backend code out.
+data/raw/
+data/processed/report/
+outputs/
+frontend/
+src/
+scrapper/
+automation/
+docs/
+.git/
+.github/
+venv/
+node_modules/
+pre-purge.bundle

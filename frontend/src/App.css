@@ -1,44 +1,35 @@
 .page-fade-in {
-  animation: pageFadeIn 260ms ease-out both;
+  animation: pageFadeIn 320ms ease-out both;
 }
 
 .stagger-in > * {
-  animation: staggerIn 320ms ease-out both;
+  animation: staggerIn 420ms ease-out both;
 }
 
-.stagger-in > *:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.stagger-in > *:nth-child(2) {
-  animation-delay: 40ms;
-}
-
-.stagger-in > *:nth-child(3) {
-  animation-delay: 80ms;
-}
-
-.stagger-in > *:nth-child(4) {
-  animation-delay: 120ms;
-}
-
-.stagger-in > *:nth-child(5) {
-  animation-delay: 160ms;
-}
-
-.stagger-in > *:nth-child(6) {
-  animation-delay: 200ms;
-}
-
-.stagger-in > *:nth-child(7) {
-  animation-delay: 240ms;
-}
-
-.stagger-in > *:nth-child(8) {
-  animation-delay: 280ms;
-}
+.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2) { animation-delay: 45ms; }
+.stagger-in > *:nth-child(3) { animation-delay: 90ms; }
+.stagger-in > *:nth-child(4) { animation-delay: 135ms; }
+.stagger-in > *:nth-child(5) { animation-delay: 180ms; }
+.stagger-in > *:nth-child(6) { animation-delay: 225ms; }
+.stagger-in > *:nth-child(7) { animation-delay: 270ms; }
+.stagger-in > *:nth-child(8) { animation-delay: 315ms; }
 
 @keyframes staggerIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes pageFadeIn {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -50,23 +41,12 @@
   }
 }
 
-@keyframes pageFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .animate-spin {
   animation: spin 1s linear infinite;
 }
 
 .float-slow {
-  animation: floatSlow 7s ease-in-out infinite;
+  animation: floatSlow 9s ease-in-out infinite;
 }
 
 @keyframes floatSlow {
@@ -76,7 +56,7 @@
   }
 
   50% {
-    transform: translateY(-6px);
+    transform: translateY(-8px);
   }
 }
 
@@ -84,6 +64,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }

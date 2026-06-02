@@ -77,9 +77,9 @@ class Settings(BaseSettings):
     enable_explainability: bool = False
 
     # ─── ML Model Family ────────────────────────────────────
-    # xgboost (default) keeps the current behaviour.
-    # random_forest switches the pipeline to sklearn's RandomForestClassifier.
-    model_family: str = "xgboost"
+    # random_forest matches the current checked-in model artifacts.
+    # Set MODEL_FAMILY=xgboost to switch to XGBoost artifacts when present.
+    model_family: str = "random_forest"
 
     # Stock universe quality gates. These keep very thin symbols out of the
     # dashboard while still showing all model-ready liquid stocks.

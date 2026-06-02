@@ -31,6 +31,11 @@ def _family_suffix(family: str) -> str:
     return "" if family == "xgboost" else "_rf"
 
 
+def _buy_model_pattern_for_family(family: str) -> str:
+    suffix = _family_suffix(family)
+    return f"model_fold*{suffix}.pkl"
+
+
 class DataLoader:
     """Loads and manages ML model, features, scaler, and configuration."""
     
@@ -54,11 +59,36 @@ class DataLoader:
         self.config = {}
         self.features_df = None
         self.all_symbols = []
-        self.model_family = _normalize_model_family(settings.model_family)
+        self.model_family = self._select_model_family(settings.model_family)
         self._family_bundles: Dict[str, Dict[str, Any]] = {}
         
         self._load_all()
         self._initialized = True
+
+    def _has_buy_model_for_family(self, family: str) -> bool:
+        suffix = _family_suffix(family)
+        candidates = glob.glob(str(settings.model_dir / _buy_model_pattern_for_family(family)))
+        candidates = [p for p in candidates if "_sell" not in os.path.basename(p)]
+        if not suffix:
+            candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
+        return bool(candidates)
+
+    def _select_model_family(self, requested_family: Optional[str]) -> str:
+        """Use the requested family when available; otherwise fall back to local artifacts."""
+        requested = _normalize_model_family(requested_family)
+        if self._has_buy_model_for_family(requested):
+            return requested
+
+        for candidate in ("random_forest", "xgboost"):
+            if candidate != requested and self._has_buy_model_for_family(candidate):
+                logger.warning(
+                    "Requested model family '%s' has no BUY model; falling back to '%s'",
+                    requested,
+                    candidate,
+                )
+                return candidate
+
+        return requested
     
     def _load_all(self):
         """Load all components in order."""
@@ -76,7 +106,7 @@ class DataLoader:
                 self.config = json.load(f)
             logger.info(f"Loaded config from {config_path}")
         except FileNotFoundError as e:
-            logger.error(f"fold_config.json not found: {e}")
+            logger.warning(f"fold_config.json not found; using model bundle features when available: {e}")
             self.config = {}
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in fold_config.json: {e}")
@@ -87,7 +117,7 @@ class DataLoader:
         suffix = _family_suffix(self.model_family)
 
         # Load BUY model (latest fold for the selected family)
-        buy_pattern = f"model_fold*{suffix}.pkl"
+        buy_pattern = _buy_model_pattern_for_family(self.model_family)
         buy_candidates = glob.glob(str(settings.model_dir / buy_pattern))
         buy_candidates = [
             p for p in buy_candidates

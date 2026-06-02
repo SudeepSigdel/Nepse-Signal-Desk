@@ -1,9 +1,9 @@
 name: Daily Pipeline
 
 on:
-  # Run daily at 11:15 UTC. Adjust if you want a different market-close window.
+  # Run daily at 12:15 UTC, which is 6:00 PM Nepal time (UTC+05:45).
   schedule:
-    - cron: '15 11 * * *'
+    - cron: '15 12 * * *'
   # Trigger on pushes and pull requests so CI runs for every commit and PR
   push: {}
   pull_request: {}
@@ -54,29 +54,38 @@ jobs:
           python -m pytest app/test_exit_rules.py -q
 
       - name: Run daily pipeline
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main')
         env:
           MPLBACKEND: Agg
           PYTHONUNBUFFERED: '1'
         run: |
           echo "Starting daily pipeline at $(date -u)"
-          python automation/daily_pipeline.py --source sharesansar --delay 0.2
+          python automation/daily_pipeline.py --source sharesansar --delay 0.2 --model-family both
           echo "Pipeline completed at $(date -u)"
 
       - name: Commit updated data
-        if: success()
+        if: success() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main'))
         run: |
+          BRANCH="${GITHUB_REF_NAME:-main}"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/raw data/processed outputs
+
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+          git add -f data/raw data/processed outputs
           if git diff --cached --quiet; then
             echo "No data changes to commit."
             exit 0
           fi
+
           git commit -m "chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
-          git push
+          git pull --rebase origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"
 
       - name: Upload logs and outputs
-        if: always()
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main'))
         uses: actions/upload-artifact@v4
         with:
           name: daily-pipeline-artifacts

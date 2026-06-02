@@ -6,6 +6,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+STALE_LOCK_MINUTES = 12 * 60
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run NEPSE scrape + full ML pipeline in sequence.")
@@ -15,17 +17,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--delay", type=float, default=0.2, help="Per-symbol delay for scraper.")
     parser.add_argument("--skip-scrape", action="store_true", help="Skip scraping step.")
     parser.add_argument("--skip-parquet", action="store_true", help="Pass --skip-parquet to scraper.")
+    parser.add_argument(
+        "--model-family",
+        choices=["both", "xgboost", "random_forest", "rf"],
+        default="both",
+        help="Model family to train/evaluate after data prep. 'both' runs XGBoost and Random Forest.",
+    )
     return parser.parse_args()
 
 
-def run_step(label: str, command: list[str], env: dict[str, str]) -> None:
+def run_step(label: str, command: list[str], env: dict[str, str], env_overrides: dict[str, str] | None = None) -> None:
     print("\n" + "=" * 78)
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] START: {label}")
     print("Command:", " ".join(command))
+    if env_overrides:
+        print("Env:", " ".join(f"{key}={value}" for key, value in sorted(env_overrides.items())))
     print("=" * 78)
     started = time.time()
 
-    result = subprocess.run(command, env=env)
+    step_env = env.copy()
+    if env_overrides:
+        step_env.update(env_overrides)
+
+    result = subprocess.run(command, env=step_env)
     elapsed = time.time() - started
 
     if result.returncode != 0:
@@ -48,10 +62,27 @@ def main() -> int:
 
     if lock_path.exists():
         age_minutes = (time.time() - lock_path.stat().st_mtime) / 60.0
+        if age_minutes >= STALE_LOCK_MINUTES:
+            print(
+                "Removing stale lock file at",
+                lock_path,
+                f"(age: {age_minutes:.1f} minutes).",
+            )
+            lock_path.unlink()
+        else:
+            print(
+                "Existing lock file found at",
+                lock_path,
+                f"(age: {age_minutes:.1f} minutes).",
+            )
+            print("If no run is active, delete the lock file and retry.")
+            return 1
+
+    if lock_path.exists():
         print(
             "Existing lock file found at",
             lock_path,
-            f"(age: {age_minutes:.1f} minutes).",
+            "(unable to remove it automatically).",
         )
         print("If no run is active, delete the lock file and retry.")
         return 1
@@ -65,9 +96,11 @@ def main() -> int:
 
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
+    env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONUTF8"] = "1"
 
-    steps: list[tuple[str, list[str]]] = []
+    steps: list[tuple[str, list[str], dict[str, str] | None]] = []
 
     if not args.skip_scrape:
         scrape_cmd = [
@@ -86,28 +119,47 @@ def main() -> int:
         if args.skip_parquet:
             scrape_cmd.append("--skip-parquet")
 
-        steps.append(("Scrape latest NEPSE data", scrape_cmd))
+        steps.append(("Scrape latest NEPSE data", scrape_cmd, None))
 
-    pipeline_scripts = [
+    prep_scripts = [
         "01_data_audit.py",
         "02_data_cleaning.py",
         "03_feature_engineering.py",
         "03b_fix_infinities.py",
         "04_label_construction.py",
         "05_walk_forward_setup.py",
+    ]
+
+    model_scripts = [
         "06_train_model.py",
         "06b_train_sell_model.py",
         "07_backtest.py",
         "08_reporting.py",
     ]
 
-    for script_name in pipeline_scripts:
+    for script_name in prep_scripts:
         steps.append(
             (
                 f"Run {script_name}",
                 [python_exe, str(project_root / "src" / script_name)],
+                None,
             )
         )
+
+    requested_family = "random_forest" if args.model_family == "rf" else args.model_family
+    model_families = ["xgboost", "random_forest"] if requested_family == "both" else [requested_family]
+
+    for family in model_families:
+        family_env = {"MODEL_FAMILY": family}
+        family_label = "Random Forest" if family == "random_forest" else "XGBoost"
+        for script_name in model_scripts:
+            steps.append(
+                (
+                    f"Run {script_name} ({family_label})",
+                    [python_exe, str(project_root / "src" / script_name)],
+                    family_env,
+                )
+            )
 
     started_all = time.time()
     exit_code = 0
@@ -119,8 +171,8 @@ def main() -> int:
             fh.write(f"Project root: {project_root}\n")
             fh.write("\n")
 
-        for label, command in steps:
-            run_step(label, command, env)
+        for label, command, env_overrides in steps:
+            run_step(label, command, env, env_overrides)
             with log_file.open("a", encoding="utf-8") as fh:
                 fh.write(f"SUCCESS: {label} at {datetime.now().isoformat()}\n")
 

@@ -6,6 +6,7 @@ import { useModelFamily, type ModelFamily } from '../modelFamily'
 import ModelSelector from './ModelSelector'
 import { GlossaryModal } from './GlossaryModal'
 import { RiskPanel } from './RiskPanel'
+import { useTheme } from '../hooks/useTheme'
 
 type VerdictFilter = 'all' | 'BUY' | 'MODERATE' | 'SELL' | 'WEAK_SELL' | 'HOLD' | 'AVOID'
 
@@ -37,6 +38,7 @@ function deriveVerdict(stock: Stock): VerdictFilter {
 }
 
 export default function DashboardOverview() {
+  const { toggleTheme, isDark } = useTheme()
   const [family, setFamily] = useModelFamily()
   const { stocks, loading, error } = useStocks(REFRESH_INTERVAL_MS, family)
   const [searchTerm, setSearchTerm] = useState('')
@@ -74,8 +76,14 @@ export default function DashboardOverview() {
   const refreshSeconds = Math.round(REFRESH_INTERVAL_MS / 1000)
 
   return (
-    <div className="min-h-screen w-full bg-app page-fade-in pb-12">
-      <TopNav family={family} setFamily={setFamily} refreshSeconds={refreshSeconds} />
+    <div className="min-h-screen w-full bg-transparent page-fade-in pb-12">
+      <TopNav
+        family={family}
+        setFamily={setFamily}
+        refreshSeconds={refreshSeconds}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+      />
 
       <main className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         {error && (
@@ -92,8 +100,8 @@ export default function DashboardOverview() {
         <section className="market-header">
           <div>
             <p className="section-kicker">NEPSE signal board</p>
-            <h1 className="mt-2 font-display text-3xl font-semibold text-white sm:text-4xl">Market Overview</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+            <h1 className="mt-2 font-display text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl">Market Overview</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
               Liquid, model-ready stocks ranked by current 10-day opportunity score.
             </p>
           </div>
@@ -116,7 +124,7 @@ export default function DashboardOverview() {
               <div className="mt-4 space-y-4">
                 <ModelSelector value={family} onChange={setFamily} />
                 <div>
-                  <label htmlFor="stock-search" className="mb-2 block text-xs font-medium text-slate-400">
+                  <label htmlFor="stock-search" className="mb-2 block text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Symbol or verdict
                   </label>
                   <input
@@ -136,11 +144,11 @@ export default function DashboardOverview() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="section-kicker">Top of tape</p>
-                    <div className="mt-3 font-display text-4xl font-semibold text-white">{topSignal.symbol}</div>
+                    <div className="mt-3 font-display text-4xl font-semibold text-slate-900 dark:text-white">{topSignal.symbol}</div>
                   </div>
                   <VerdictBadge verdict={topSignal.verdict ?? 'HOLD'} />
                 </div>
-                <div className="mt-4 space-y-2 text-sm text-slate-300">
+                <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                   <SignalMeter label="Score" value={primaryConfidence(topSignal)} verdict={topSignal.verdict ?? 'HOLD'} />
                   {topSignal.sell_confidence !== null && topSignal.sell_confidence !== undefined && (
                     <SignalMeter label="Sell risk" value={topSignal.sell_confidence} verdict="SELL" />
@@ -172,7 +180,7 @@ export default function DashboardOverview() {
             <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="section-kicker">Ranked universe</p>
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Showing {sortedStocks.length} of {enrichedStocks.length} liquid symbols
                 </p>
               </div>
@@ -181,7 +189,7 @@ export default function DashboardOverview() {
             {loading ? (
               <div className="grid gap-3 p-4">
                 {Array.from({ length: 8 }).map((_, index) => (
-                  <div key={index} className="h-12 animate-pulse rounded bg-white/[0.04]" />
+                  <div key={index} className="h-12 animate-pulse rounded bg-slate-200 dark:bg-white/[0.04]" />
                 ))}
               </div>
             ) : (
@@ -211,7 +219,7 @@ export default function DashboardOverview() {
                       sortedStocks.map((stock) => (
                         <tr key={stock.symbol} onClick={() => navigate(`/stocks/${stock.symbol}`)}>
                           <td>
-                            <span className="font-semibold text-white">{stock.symbol}</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{stock.symbol}</span>
                           </td>
                           <td className="text-right tabular-nums">{stock.close.toFixed(2)}</td>
                           <td className="text-right tabular-nums">{stock.rsi !== null ? stock.rsi.toFixed(1) : '-'}</td>
@@ -226,7 +234,7 @@ export default function DashboardOverview() {
                           )}
                           <td className="text-right tabular-nums">{formatPercent(stock.sell_confidence)}</td>
                           <td><VerdictBadge verdict={stock.verdict ?? 'HOLD'} /></td>
-                          <td className="text-slate-500">{stock.date}</td>
+                          <td className="text-slate-500 dark:text-slate-500">{stock.date}</td>
                         </tr>
                       ))
                     )}
@@ -251,19 +259,49 @@ function TopNav({
   family,
   setFamily,
   refreshSeconds,
+  isDark,
+  toggleTheme,
 }: {
   family: ModelFamily
   setFamily: (family: ModelFamily) => void
   refreshSeconds: number
+  isDark: boolean
+  toggleTheme: () => void
 }) {
   return (
-    <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#07100d]/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div>
-          <p className="font-display text-base font-semibold text-white">{APP_TITLE}</p>
-          <p className="hidden text-xs text-slate-500 sm:block">Refreshes every {refreshSeconds}s</p>
+    <nav className="sticky top-0 z-50 border-b border-black/5 dark:border-white/10 bg-[var(--nav-bg)] backdrop-blur-md transition-colors duration-300">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-md">
+            <span className="text-white font-display font-bold text-sm">N</span>
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-display text-base font-bold text-slate-900 dark:text-white tracking-tight">{APP_TITLE}</p>
+            <p className="hidden text-[10px] text-slate-500 sm:block">Refreshes every {refreshSeconds}s</p>
+          </div>
         </div>
-        <ModelSelector value={family} onChange={setFamily} />
+        
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <ModelSelector value={family} onChange={setFamily} />
+          
+          <button
+            onClick={toggleTheme}
+            type="button"
+            className="p-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.06] transition-all"
+            aria-label="Toggle theme"
+            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {isDark ? (
+              <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 9h-1m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
     </nav>
   )
