@@ -2,45 +2,66 @@
   "folds": [
     {
       "fold": 1,
+      "train_start": "2012-01-01",
       "train_end": "2017-12-31",
       "test_start": "2018-02-01",
       "test_end": "2018-12-31"
     },
     {
       "fold": 2,
+      "train_start": "2012-01-01",
       "train_end": "2018-12-31",
       "test_start": "2019-02-01",
       "test_end": "2019-12-31"
     },
     {
       "fold": 3,
+      "train_start": "2012-01-01",
       "train_end": "2019-12-31",
       "test_start": "2020-02-01",
       "test_end": "2020-12-31"
     },
     {
       "fold": 4,
+      "train_start": "2012-01-01",
       "train_end": "2020-12-31",
       "test_start": "2021-02-01",
       "test_end": "2021-12-31"
     },
     {
       "fold": 5,
+      "train_start": "2012-01-01",
       "train_end": "2021-12-31",
       "test_start": "2022-02-01",
       "test_end": "2022-12-31"
     },
     {
       "fold": 6,
+      "train_start": "2012-01-01",
       "train_end": "2022-12-31",
       "test_start": "2023-02-01",
       "test_end": "2023-12-31"
     },
     {
       "fold": 7,
+      "train_start": "2012-01-01",
       "train_end": "2023-12-31",
       "test_start": "2024-02-01",
-      "test_end": "2025-09-21"
+      "test_end": "2024-12-31"
+    },
+    {
+      "fold": 8,
+      "train_start": "2012-01-01",
+      "train_end": "2024-12-31",
+      "test_start": "2025-02-01",
+      "test_end": "2025-12-31"
+    },
+    {
+      "fold": 9,
+      "train_start": "2012-01-01",
+      "train_end": "2025-12-31",
+      "test_start": "2026-02-01",
+      "test_end": "2026-05-02"
     }
   ],
   "feature_cols": [
@@ -70,5 +91,10 @@
     "Gap_pct"
   ],
   "label_col": "Label_10d",
-  "embargo_days": 20
+  "embargo_days": 20,
+  "min_train_years": 6,
+  "test_start_month": 2,
+  "test_start_day": 1,
+  "min_train_rows": 1000,
+  "min_test_rows": 100
 }
