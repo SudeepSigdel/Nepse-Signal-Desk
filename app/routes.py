@@ -90,6 +90,39 @@ def health_check():
         symbols_count=len(loader.all_symbols),
     )
 
+import os
+import glob
+@health_router.get("/debug")
+def debug_info():
+    loader = DataLoader()
+    
+    data_dir = str(settings.data_processed_dir)
+    models_dir = str(settings.model_dir)
+    
+    try:
+        data_files = os.listdir(data_dir) if os.path.exists(data_dir) else ["DIR_NOT_FOUND"]
+    except Exception as e:
+        data_files = [str(e)]
+        
+    try:
+        model_files = os.listdir(models_dir) if os.path.exists(models_dir) else ["DIR_NOT_FOUND"]
+    except Exception as e:
+        model_files = [str(e)]
+        
+    return {
+        "is_ready": loader.is_ready(),
+        "model_buy_loaded": loader.model_buy is not None,
+        "scaler_buy_loaded": loader.scaler_buy is not None,
+        "features_df_loaded": loader.features_df is not None,
+        "symbols_count": len(loader.all_symbols),
+        "data_dir_exists": os.path.exists(data_dir),
+        "models_dir_exists": os.path.exists(models_dir),
+        "data_files": data_files,
+        "model_files": model_files,
+        "model_family": loader.model_family,
+        "buy_pattern": f"model_fold*_{loader.model_family}.pkl"
+    }
+
 
 # ══════════════════════════════════════════════════════════════════
 # STOCKS
