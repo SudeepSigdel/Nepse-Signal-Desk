@@ -36,6 +36,29 @@ def _buy_model_pattern_for_family(family: str) -> str:
     return f"model_fold*{suffix}.pkl"
 
 
+def _latest_buy_model_name(family: str) -> str:
+    return f"model_latest{_family_suffix(family)}.pkl"
+
+
+def _latest_sell_model_name(family: str) -> str:
+    return f"model_latest{_family_suffix(family)}_sell.pkl"
+
+
+def _model_sort_key(path: str, family: str, sell: bool = False) -> int:
+    basename = os.path.basename(path)
+    if basename == (_latest_sell_model_name(family) if sell else _latest_buy_model_name(family)):
+        return 10**9
+
+    suffix = _family_suffix(family)
+    pattern = (
+        rf"model_fold(\d+){re.escape(suffix)}_sell\.pkl$"
+        if sell
+        else rf"model_fold(\d+){re.escape(suffix)}\.pkl$"
+    )
+    match = re.search(pattern, basename)
+    return int(match.group(1)) if match else -1
+
+
 class DataLoader:
     """Loads and manages ML model, features, scaler, and configuration."""
     
@@ -68,6 +91,7 @@ class DataLoader:
     def _has_buy_model_for_family(self, family: str) -> bool:
         suffix = _family_suffix(family)
         candidates = glob.glob(str(settings.model_dir / _buy_model_pattern_for_family(family)))
+        candidates.extend(glob.glob(str(settings.model_dir / _latest_buy_model_name(family))))
         candidates = [p for p in candidates if "_sell" not in os.path.basename(p)]
         if not suffix:
             candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
@@ -119,6 +143,7 @@ class DataLoader:
         # Load BUY model (latest fold for the selected family)
         buy_pattern = _buy_model_pattern_for_family(self.model_family)
         buy_candidates = glob.glob(str(settings.model_dir / buy_pattern))
+        buy_candidates.extend(glob.glob(str(settings.model_dir / _latest_buy_model_name(self.model_family))))
         buy_candidates = [
             p for p in buy_candidates
             if "_sell" not in os.path.basename(p)
@@ -126,11 +151,7 @@ class DataLoader:
         ]
         
         if buy_candidates:
-            def fold_num(path):
-                m = re.search(rf"model_fold(\d+){re.escape(suffix)}\.pkl$", os.path.basename(path))
-                return int(m.group(1)) if m else -1
-            
-            model_path = max(buy_candidates, key=fold_num)
+            model_path = max(buy_candidates, key=lambda path: _model_sort_key(path, self.model_family))
             logger.info(f"Loading BUY model ({self.model_family}) from {model_path}")
             
             try:
@@ -154,15 +175,12 @@ class DataLoader:
         # Load SELL model (latest fold with _sell suffix and the selected family)
         sell_pattern = f"model_fold*{suffix}_sell.pkl" if suffix else "model_fold*_sell.pkl"
         sell_candidates = glob.glob(str(settings.model_dir / sell_pattern))
+        sell_candidates.extend(glob.glob(str(settings.model_dir / _latest_sell_model_name(self.model_family))))
         if not suffix:
             sell_candidates = [p for p in sell_candidates if "_rf" not in os.path.basename(p)]
         
         if sell_candidates:
-            def fold_num_sell(path):
-                m = re.search(rf"model_fold(\d+){re.escape(suffix)}_sell\.pkl$", os.path.basename(path))
-                return int(m.group(1)) if m else -1
-            
-            model_path = max(sell_candidates, key=fold_num_sell)
+            model_path = max(sell_candidates, key=lambda path: _model_sort_key(path, self.model_family, sell=True))
             logger.info(f"Loading SELL model ({self.model_family}) from {model_path}")
             
             try:
@@ -252,6 +270,7 @@ class DataLoader:
         # Search for latest BUY model for this family
         buy_pattern = f"model_fold*{suffix}.pkl"
         candidates = glob.glob(str(settings.model_dir / buy_pattern))
+        candidates.extend(glob.glob(str(settings.model_dir / _latest_buy_model_name(fam))))
         candidates = [p for p in candidates if "_sell" not in os.path.basename(p)]
         if not suffix:
             candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
@@ -261,11 +280,7 @@ class DataLoader:
             self._family_bundles[fam] = None
             return None
 
-        def _fold_num(path):
-            m = re.search(rf"model_fold(\d+){re.escape(suffix)}\.pkl$", os.path.basename(path))
-            return int(m.group(1)) if m else -1
-
-        model_path = max(candidates, key=_fold_num)
+        model_path = max(candidates, key=lambda path: _model_sort_key(path, fam))
         try:
             with open(model_path, "rb") as f:
                 bundle = pickle.load(f)

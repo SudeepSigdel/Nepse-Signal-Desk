@@ -15,10 +15,10 @@
 !data/processed/all_stocks_features.parquet
 !data/processed/fold_config.json
 !data/processed/models/
-!data/processed/models/model_fold7.pkl
-!data/processed/models/model_fold7_sell.pkl
-!data/processed/models/model_fold7_rf.pkl
-!data/processed/models/model_fold7_rf_sell.pkl
+!data/processed/models/model_latest.pkl
+!data/processed/models/model_latest_sell.pkl
+!data/processed/models/model_latest_rf.pkl
+!data/processed/models/model_latest_rf_sell.pkl
 
 # Explicitly keep generated research/training artifacts and non-backend code out.
 data/raw/

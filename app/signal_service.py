@@ -97,10 +97,13 @@ class SignalService:
             sell_path = None
             sell_pattern = f"model_fold*{suffix}_sell.pkl"
             candidates = glob.glob(str(settings.model_dir / sell_pattern))
+            candidates.extend(glob.glob(str(settings.model_dir / f"model_latest{suffix}_sell.pkl")))
             if not suffix:
                 candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
             if candidates:
                 def _fold_num(p):
+                    if os.path.basename(p) == f"model_latest{suffix}_sell.pkl":
+                        return 10**9
                     m = re.search(rf"model_fold(\d+){re.escape(suffix)}_sell\.pkl$", os.path.basename(p))
                     return int(m.group(1)) if m else -1
                 sell_path = max(candidates, key=_fold_num)

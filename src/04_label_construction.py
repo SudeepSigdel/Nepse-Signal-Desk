@@ -39,12 +39,24 @@ df = per_stock(lambda g: compute_forward_returns(g, horizons=[5, 10]), df)
 print(" Forward returns computed")
 
 
-df["Label_5d"]  = (df["Fwd_ret_5d"]  > TRANSACTION_COST).astype(int)
-df["Label_10d"] = (df["Fwd_ret_10d"] > TRANSACTION_COST).astype(int)
+df["Label_5d"] = np.where(
+    df["Fwd_ret_5d"].notna(),
+    (df["Fwd_ret_5d"] > TRANSACTION_COST).astype(int),
+    np.nan,
+)
+df["Label_10d"] = np.where(
+    df["Fwd_ret_10d"].notna(),
+    (df["Fwd_ret_10d"] > TRANSACTION_COST).astype(int),
+    np.nan,
+)
 
 # SELL LABELS: Mirror logic with inverted threshold
 # A SELL signal when stock drops more than 1% in next 10 days
-df["Label_10d_sell"] = (df["Fwd_ret_10d"] < -TRANSACTION_COST).astype(int)
+df["Label_10d_sell"] = np.where(
+    df["Fwd_ret_10d"].notna(),
+    (df["Fwd_ret_10d"] < -TRANSACTION_COST).astype(int),
+    np.nan,
+)
 
 print(" Binary labels created (BUY + SELL)")
 
@@ -55,8 +67,9 @@ print("LABEL DISTRIBUTION")
 print("="*55)
 
 for label in ["Label_5d", "Label_10d"]:
-    count_1 = df[label].sum()
-    count_0 = (df[label] == 0).sum()
+    valid_label = df[label].dropna()
+    count_1 = int(valid_label.sum())
+    count_0 = int((valid_label == 0).sum())
     total   = count_1 + count_0
     pct_1   = count_1 / total * 100
     pct_0   = count_0 / total * 100
@@ -69,8 +82,9 @@ for label in ["Label_5d", "Label_10d"]:
 if "Label_10d_sell" in df.columns:
     print("\n" + "-"*55)
     label = "Label_10d_sell"
-    count_1 = df[label].sum()
-    count_0 = (df[label] == 0).sum()
+    valid_label = df[label].dropna()
+    count_1 = int(valid_label.sum())
+    count_0 = int((valid_label == 0).sum())
     total   = count_1 + count_0
     pct_1   = count_1 / total * 100
     pct_0   = count_0 / total * 100
@@ -157,7 +171,7 @@ plt.show()
 print(" Distribution chart saved to outputs/")
 
 rows_before = len(df)
-df_labeled = df.dropna(subset=["Label_5d", "Label_10d"]).copy()
+df_labeled = df.dropna(subset=["Label_5d", "Label_10d", "Label_10d_sell"]).copy()
 rows_dropped = rows_before - len(df_labeled)
 
 print(f"\n Dropped {rows_dropped:,} rows with no forward label "

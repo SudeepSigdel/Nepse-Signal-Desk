@@ -16,6 +16,7 @@ import numpy as np
 import os
 import json
 import pickle
+import shutil
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
@@ -40,6 +41,7 @@ with open(os.path.join(PROCESSED_DIR, "fold_config.json")) as fp:
 FOLDS        = config["folds"]
 FEATURE_COLS = config["feature_cols"]
 LABEL_COL    = "Label_10d_sell"  # Use SELL label instead of BUY
+LATEST_FOLD = max(int(fold["fold"]) for fold in FOLDS)
 
 # Verify SELL labels exist
 if LABEL_COL not in df.columns:
@@ -112,7 +114,7 @@ all_predictions = []
 fold_metrics    = []
 
 print("\n" + "="*65)
-print("TRAINING SELL CLASSIFIERS (7 folds)")
+print(f"TRAINING SELL CLASSIFIERS ({len(FOLDS)} folds)")
 print("="*65)
 
 for f in FOLDS:
@@ -162,9 +164,13 @@ for f in FOLDS:
     os.makedirs(model_dir, exist_ok=True)
     
     # Save with _sell suffix to distinguish from BUY models
-    with open(os.path.join(model_dir, f"model_fold{fold_num}{MODEL_SUFFIX}_sell.pkl"), "wb") as fp:
+    model_path = os.path.join(model_dir, f"model_fold{fold_num}{MODEL_SUFFIX}_sell.pkl")
+    with open(model_path, "wb") as fp:
         pickle.dump({"model": model, "scaler": scaler,
                      "features": FEATURE_COLS, "family": MODEL_FAMILY}, fp)
+    if int(fold_num) == LATEST_FOLD:
+        latest_path = os.path.join(model_dir, f"model_latest{MODEL_SUFFIX}_sell.pkl")
+        shutil.copy2(model_path, latest_path)
     print(f"         → Saved: model_fold{fold_num}{MODEL_SUFFIX}_sell.pkl")
 
 
@@ -205,7 +211,7 @@ print(classification_report(
 
 # Feature importance visualization (using last fold)
 last_model = pickle.load(
-    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7{MODEL_SUFFIX}_sell.pkl"), "rb")
+    open(os.path.join(PROCESSED_DIR, "models", f"model_fold{LATEST_FOLD}{MODEL_SUFFIX}_sell.pkl"), "rb")
 )["model"]
 
 importances = pd.Series(
@@ -217,7 +223,7 @@ plt.figure(figsize=(9, 7))
 importances.plot(kind="barh", color="coral", edgecolor="none")
 plt.axvline(1/len(FEATURE_COLS), color="red", linestyle="--",
             label=f"Uniform baseline ({1/len(FEATURE_COLS):.3f})")
-plt.title("Feature importance — SELL Classifier (Fold 7)\n"
+plt.title(f"Feature importance - SELL Classifier (Fold {LATEST_FOLD})\n"
           "(features above red line contribute more than average)")
 plt.xlabel("Importance score")
 plt.legend()
@@ -236,4 +242,4 @@ metrics_df.to_csv(os.path.join(PROCESSED_DIR, f"fold_metrics{MODEL_SUFFIX}_sell.
 print(f"\nSaved out-of-sample predictions → oos_predictions{MODEL_SUFFIX}_sell.parquet")
 print(f"Saved fold metrics              → fold_metrics{MODEL_SUFFIX}_sell.csv")
 print(f"\n✓ SELL Classifier training complete!")
-print(f"  All 7 models saved: model_fold*{MODEL_SUFFIX}_sell.pkl")
+print(f"  All {len(FOLDS)} models saved: model_fold*{MODEL_SUFFIX}_sell.pkl")

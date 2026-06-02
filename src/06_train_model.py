@@ -3,6 +3,7 @@ import numpy as np
 import os
 import json
 import pickle
+import shutil
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
@@ -27,6 +28,7 @@ with open(os.path.join(PROCESSED_DIR, "fold_config.json")) as fp:
 FOLDS        = config["folds"]
 FEATURE_COLS = config["feature_cols"]
 LABEL_COL    = config["label_col"]
+LATEST_FOLD = max(int(fold["fold"]) for fold in FOLDS)
 
 print(f"Loaded: {df.shape[0]:,} rows | {len(FEATURE_COLS)} features | label: {LABEL_COL}")
 
@@ -168,6 +170,9 @@ for f in FOLDS:
     with open(model_path, "wb") as fp:
         pickle.dump({"model": model, "scaler": scaler,
                      "features": FEATURE_COLS, "family": MODEL_FAMILY}, fp)
+    if int(fold_num) == LATEST_FOLD:
+        latest_path = os.path.join(model_dir, f"model_latest{MODEL_SUFFIX}.pkl")
+        shutil.copy2(model_path, latest_path)
 
 
 combined_preds = pd.concat(all_predictions, ignore_index=True)
@@ -206,7 +211,7 @@ print(classification_report(
 ))
 
 last_model = pickle.load(
-    open(os.path.join(PROCESSED_DIR, "models", f"model_fold7{MODEL_SUFFIX}.pkl"), "rb")
+    open(os.path.join(PROCESSED_DIR, "models", f"model_fold{LATEST_FOLD}{MODEL_SUFFIX}.pkl"), "rb")
 )["model"]
 
 importances = pd.Series(
@@ -218,7 +223,7 @@ plt.figure(figsize=(9, 7))
 importances.plot(kind="barh", color="steelblue", edgecolor="none")
 plt.axvline(1/len(FEATURE_COLS), color="red", linestyle="--",
             label=f"Uniform baseline ({1/len(FEATURE_COLS):.3f})")
-plt.title("Feature importance — Fold 7 model\n"
+plt.title(f"Feature importance - Fold {LATEST_FOLD} model\n"
           "(features above red line contribute more than average)")
 plt.xlabel("Importance score")
 plt.legend()

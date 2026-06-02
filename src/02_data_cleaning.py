@@ -5,6 +5,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+MIN_ROWS_PER_SYMBOL = 120
+LOW_COVERAGE_MEDIAN_FRACTION = 0.5
 
 df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_combined.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows x {df.shape[1]} columns")
@@ -16,17 +18,39 @@ df["Log_Return"] = df["Log_Return"].fillna(0)
 
 print("Fixed missing Volume, Daily_Return, Log_Return")
 
-before = len(df)
-df = df[df["Symbol"] != "SANVI"].copy()
-after = len(df)
-print(f"Removed SANVI: {before - after} rows dropped")
-print(f"Remaining stocks: {df['Symbol'].nunique()}")
+symbol_summary = (
+    df.groupby("Symbol")
+    .agg(Rows=("Date", "size"), Start=("Date", "min"), End=("Date", "max"))
+    .sort_values(["Rows", "Symbol"])
+)
 
-bnl_info = df[df["Symbol"] == "BNL"]
-print(f"\n BNL note: {len(bnl_info)} rows from "
-      f"{bnl_info['Date'].min().date()} to {bnl_info['Date'].max().date()}")
-print(f"Average trading days per year: "
-      f"{len(bnl_info)/13:.0f} (very low- normal NEPSE stocks trade ~250/year)")
+short_symbols = symbol_summary[symbol_summary["Rows"] < MIN_ROWS_PER_SYMBOL]
+if not short_symbols.empty:
+    before = len(df)
+    df = df[~df["Symbol"].isin(short_symbols.index)].copy()
+    print(
+        f"Removed {len(short_symbols)} symbols with fewer than {MIN_ROWS_PER_SYMBOL} rows: "
+        f"{', '.join(short_symbols.index)}"
+    )
+    print(f"Dropped {before - len(df):,} rows from too-short symbols")
+else:
+    print(f"No symbols below minimum row threshold ({MIN_ROWS_PER_SYMBOL})")
+
+remaining_summary = (
+    df.groupby("Symbol")
+    .agg(Rows=("Date", "size"), Start=("Date", "min"), End=("Date", "max"))
+    .sort_values(["Rows", "Symbol"])
+)
+median_rows = remaining_summary["Rows"].median()
+low_coverage = remaining_summary[remaining_summary["Rows"] < median_rows * LOW_COVERAGE_MEDIAN_FRACTION]
+if not low_coverage.empty:
+    print(
+        f"\nSymbols with less than {LOW_COVERAGE_MEDIAN_FRACTION:.0%} of median row count "
+        f"({median_rows:.0f}) are kept but flagged:"
+    )
+    print(low_coverage.to_string())
+
+print(f"Remaining stocks: {df['Symbol'].nunique()}")
 
 
 print("\n" + "=" * 50)
