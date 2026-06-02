@@ -1,9 +1,12 @@
 name: Daily Pipeline
 
 on:
+  # Run daily at 11:15 UTC. Adjust if you want a different market-close window.
   schedule:
-    # Run daily at 11:15 UTC. Adjust if you want a different market-close window.
     - cron: '15 11 * * *'
+  # Trigger on pushes and pull requests so CI runs for every commit and PR
+  push: {}
+  pull_request: {}
   workflow_dispatch:
 
 permissions:
