@@ -1,335 +1,322 @@
-import React, { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { APP_TITLE, REFRESH_INTERVAL_MS } from '../config'
-import { useStocks } from '../hooks/useStocks'
+import { useStocks, type Stock } from '../hooks/useStocks'
+import { useModelFamily, type ModelFamily } from '../modelFamily'
+import ModelSelector from './ModelSelector'
 import { GlossaryModal } from './GlossaryModal'
 import { RiskPanel } from './RiskPanel'
 
-type VerdictFilter = 'all' | 'BUY' | 'MODERATE' | 'SELL' | 'WEAK_SELL' | 'HOLD'
+type VerdictFilter = 'all' | 'BUY' | 'MODERATE' | 'SELL' | 'WEAK_SELL' | 'HOLD' | 'AVOID'
 
-// Compute verdict from dual confidence scores
-function getVerdict(buy_confidence: number, sell_confidence?: number | null): VerdictFilter {
-  if (buy_confidence >= 0.65) return 'BUY'
-  if (buy_confidence >= 0.55) return 'MODERATE'
-  if (sell_confidence && sell_confidence >= 0.65) return 'SELL'
-  if (sell_confidence && sell_confidence >= 0.55) return 'WEAK_SELL'
-  return 'HOLD'
+const verdictFilters: Array<{ label: string; value: VerdictFilter }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Buy', value: 'BUY' },
+  { label: 'Watch', value: 'MODERATE' },
+  { label: 'Sell risk', value: 'SELL' },
+  { label: 'Soft risk', value: 'WEAK_SELL' },
+  { label: 'Hold', value: 'HOLD' },
+  { label: 'Avoid', value: 'AVOID' },
+]
+
+function primaryConfidence(stock: Stock) {
+  return stock.confidence ?? stock.buy_confidence ?? 0
+}
+
+function deriveVerdict(stock: Stock): VerdictFilter {
+  if (stock.verdict === 'BUY' || stock.verdict === 'MODERATE' || stock.verdict === 'SELL' || stock.verdict === 'WEAK_SELL' || stock.verdict === 'HOLD' || stock.verdict === 'AVOID') {
+    return stock.verdict
+  }
+  const buy = primaryConfidence(stock)
+  if (buy >= 0.65) return 'BUY'
+  if (buy >= 0.55) return 'MODERATE'
+  if (stock.sell_confidence && stock.sell_confidence >= 0.65) return 'SELL'
+  if (stock.sell_confidence && stock.sell_confidence >= 0.55) return 'WEAK_SELL'
+  if (buy >= 0.45) return 'HOLD'
+  return 'AVOID'
 }
 
 export default function DashboardOverview() {
-  const { stocks, loading, error } = useStocks()
+  const [family, setFamily] = useModelFamily()
+  const { stocks, loading, error } = useStocks(REFRESH_INTERVAL_MS, family)
   const [searchTerm, setSearchTerm] = useState('')
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>('all')
   const navigate = useNavigate()
 
-  // Enrich stocks with computed verdict
-  const enrichedStocks = stocks.map((stock) => ({
-    ...stock,
-    verdict: getVerdict(stock.buy_confidence ?? stock.confidence, stock.sell_confidence),
-  }))
-
-  const filteredStocks = enrichedStocks.filter((stock) => {
-    const matchesSearch =
-      stock.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      stock.verdict.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesVerdict =
-      verdictFilter === 'all' || stock.verdict === verdictFilter
-
-    return matchesSearch && matchesVerdict
-  })
-
-  const sortedStocks = [...filteredStocks].sort((left, right) => 
-    (right.buy_confidence ?? right.confidence) - (left.buy_confidence ?? left.confidence)
+  const enrichedStocks = useMemo(
+    () => stocks.map((stock) => ({ ...stock, verdict: deriveVerdict(stock) })),
+    [stocks]
   )
-  const topSignal = sortedStocks[0]
-  
-  const buyCount = filteredStocks.filter((stock) => stock.verdict === 'BUY').length
-  const moderateCount = filteredStocks.filter((stock) => stock.verdict === 'MODERATE').length
-  const sellCount = filteredStocks.filter((stock) => stock.verdict === 'SELL').length
 
-  const verdictFilters: Array<{ label: string; value: VerdictFilter }> = [
-    { label: 'All', value: 'all' },
-    { label: '🟢 BUY', value: 'BUY' },
-    { label: '🟠 MODERATE', value: 'MODERATE' },
-    { label: '🔴 SELL', value: 'SELL' },
-    { label: '🟡 WEAK SELL', value: 'WEAK_SELL' },
-    { label: '⚪ HOLD', value: 'HOLD' },
-  ]
+  const filteredStocks = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+    return enrichedStocks.filter((stock) => {
+      const matchesSearch =
+        !query ||
+        stock.symbol.toLowerCase().includes(query) ||
+        stock.tier.toLowerCase().includes(query) ||
+        (stock.verdict ?? '').toLowerCase().includes(query)
+
+      const matchesVerdict = verdictFilter === 'all' || stock.verdict === verdictFilter
+      return matchesSearch && matchesVerdict
+    })
+  }, [enrichedStocks, searchTerm, verdictFilter])
+
+  const sortedStocks = useMemo(
+    () => [...filteredStocks].sort((left, right) => primaryConfidence(right) - primaryConfidence(left)),
+    [filteredStocks]
+  )
+
+  const topSignal = sortedStocks[0]
+  const buyCount = enrichedStocks.filter((stock) => stock.verdict === 'BUY').length
+  const watchCount = enrichedStocks.filter((stock) => stock.verdict === 'MODERATE').length
+  const riskCount = enrichedStocks.filter((stock) => stock.verdict === 'SELL' || stock.verdict === 'WEAK_SELL').length
+  const refreshSeconds = Math.round(REFRESH_INTERVAL_MS / 1000)
 
   return (
-    <div className="w-full min-h-screen page-fade-in soft-grid pb-20">
-      <TopNav />
-      
-      <main className="w-full max-w-7xl pl-8 pr-4 pt-8 md:pl-16 lg:pl-24">
-        
-        {/* Error State */}
+    <div className="min-h-screen w-full bg-app page-fade-in pb-12">
+      <TopNav family={family} setFamily={setFamily} refreshSeconds={refreshSeconds} />
+
+      <main className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         {error && (
-          <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-200">
-            <p className="font-medium">Connection Error</p>
-            <p className="mt-1 text-sm opacity-80">
-              {error === 'Network Error' || error.includes('Network') 
-                ? 'Could not connect to the server. Please ensure the backend server is running.' 
+          <div className="mb-4 rounded-lg border border-red-400/30 bg-red-950/40 p-4 text-red-100">
+            <p className="text-sm font-semibold">Connection problem</p>
+            <p className="mt-1 text-sm text-red-100/75">
+              {error === 'Network Error' || error.includes('Network')
+                ? 'Backend is not reachable. Start the API server and refresh.'
                 : error}
             </p>
           </div>
         )}
 
-        <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <section className="market-header">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              Market Overview
-            </h1>
-            <p className="mt-2 text-sm text-neutral-400 max-w-xl">
-              Screen and analyze NEPSE opportunities with AI-driven confidence scores and momentum indicators.
+            <p className="section-kicker">NEPSE signal board</p>
+            <h1 className="mt-2 font-display text-3xl font-semibold text-white sm:text-4xl">Market Overview</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              Liquid, model-ready stocks ranked by current 10-day opportunity score.
             </p>
           </div>
-          
-          <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center">
-            <div className="relative w-full md:w-64">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search symbol..."
-                className="control-field pl-9"
-              />
+
+          <div className="market-header-panel">
+            <StatTile label="Universe" value={enrichedStocks.length.toString()} tone="blue" />
+            <StatTile label="Buy" value={buyCount.toString()} tone="green" />
+            <StatTile label="Watch" value={watchCount.toString()} tone="amber" />
+            <StatTile label="Risk" value={riskCount.toString()} tone="red" />
+          </div>
+        </section>
+
+        <section className="mt-5 grid gap-4 lg:grid-cols-[280px_1fr]">
+          <aside className="space-y-4">
+            <div className="surface-panel p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="section-kicker">Controls</p>
+                <span className="live-pill">Live {refreshSeconds}s</span>
+              </div>
+              <div className="mt-4 space-y-4">
+                <ModelSelector value={family} onChange={setFamily} />
+                <div>
+                  <label htmlFor="stock-search" className="mb-2 block text-xs font-medium text-slate-400">
+                    Symbol or verdict
+                  </label>
+                  <input
+                    id="stock-search"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search NABIL, BUY..."
+                    className="control-field"
+                  />
+                </div>
+              </div>
             </div>
-            
-            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 subtle-scrollbar">
-              {verdictFilters.map((filter) => (
-                <button
-                  key={filter.value}
-                  onClick={() => setVerdictFilter(filter.value)}
-                  className={`chip-action whitespace-nowrap ${verdictFilter === filter.value ? 'chip-action-active' : ''}`}
-                >
-                  {filter.label}
+
+            {topSignal && (
+              <div className="surface-panel p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="section-kicker">Top of tape</p>
+                    <div className="mt-3 font-display text-4xl font-semibold text-white">{topSignal.symbol}</div>
+                  </div>
+                  <VerdictBadge verdict={topSignal.verdict ?? 'HOLD'} />
+                </div>
+                <div className="mt-4 space-y-2 text-sm text-slate-300">
+                  <SignalMeter label="Score" value={primaryConfidence(topSignal)} verdict={topSignal.verdict ?? 'HOLD'} />
+                  {topSignal.sell_confidence !== null && topSignal.sell_confidence !== undefined && (
+                    <SignalMeter label="Sell risk" value={topSignal.sell_confidence} verdict="SELL" />
+                  )}
+                </div>
+                <button onClick={() => navigate(`/stocks/${topSignal.symbol}`)} className="primary-action mt-5 w-full">
+                  Open research
                 </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="grid gap-6 md:grid-cols-3">
-            <DashboardSkeleton />
-            <DashboardSkeleton />
-            <DashboardSkeleton />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-4">
-              
-              {/* Left Column: KPIs & Top Signal */}
-              <div className="space-y-6 lg:col-span-1">
-                <div className="glass-panel rounded-xl p-5 stagger-in">
-                  <h3 className="section-kicker mb-4">Summary</h3>
-                  <div className="space-y-4">
-                    <KpiRow label="Total Signals " value={filteredStocks.length} />
-                    <KpiRow label="🟢 BUY " value={buyCount} highlight="green" />
-                    <KpiRow label="🟠 MODERATE " value={moderateCount} highlight="amber" />
-                    <KpiRow label="🔴 SELL " value={sellCount} highlight="red" />
-                  </div>
-                </div>
-
-                {topSignal && (
-                  <div className="glass-panel rounded-xl p-5 stagger-in flex flex-col">
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="section-kicker">Top Signal</h3>
-                      <VerdictBadge verdict={topSignal.verdict} />
-                    </div>
-                    
-                    <div className="mb-6">
-                      <div className="font-display text-4xl font-semibold text-white mb-1">
-                        {topSignal.symbol}
-                      </div>
-                      <div className="text-sm text-neutral-400">
-                        <div>BUY Confidence: <span className="text-white font-medium">{((topSignal.buy_confidence ?? topSignal.confidence) * 100).toFixed(1)}%</span></div>
-                        {topSignal.sell_confidence && (
-                          <div>SELL Confidence: <span className="text-white font-medium">{(topSignal.sell_confidence * 100).toFixed(1)}%</span></div>
-                        )}
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={() => navigate(`/stocks/${topSignal.symbol}`)}
-                      className="primary-action w-full mt-auto"
-                    >
-                      Analyze
-                    </button>
-                  </div>
-                )}
               </div>
+            )}
 
-              {/* Right Column: Data Grid */}
-              <div className="lg:col-span-3">
-                <div className="glass-panel rounded-xl overflow-hidden stagger-in flex flex-col h-full">
-                  <div className="overflow-x-auto subtle-scrollbar">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-white/10 bg-white/[0.02]">
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400">Symbol</th>
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400 text-right">Close</th>
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400 text-right">
-                            <span title="Relative Strength Index: Measures momentum">RSI ℹ️</span>
-                          </th>
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400 text-right">
-                            <span title="How confident the AI is in this signal (higher is better)">Confidence ℹ️</span>
-                          </th>
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400 text-center">Signal Strength</th>
-                          <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-neutral-400">Date</th>
+            <div className="surface-panel p-4">
+              <p className="section-kicker">Filter</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {verdictFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    onClick={() => setVerdictFilter(filter.value)}
+                    className={verdictFilter === filter.value ? 'chip-action chip-action-active' : 'chip-action'}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          <section className="surface-panel overflow-hidden">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="section-kicker">Ranked universe</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  Showing {sortedStocks.length} of {enrichedStocks.length} liquid symbols
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="grid gap-3 p-4">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div key={index} className="h-12 animate-pulse rounded bg-white/[0.04]" />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto subtle-scrollbar">
+                <table className="market-table">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th className="text-right">Close</th>
+                      <th className="text-right">RSI</th>
+                      <th className="text-right">{family === 'both' ? 'Blend' : 'Buy score'}</th>
+                      {family === 'both' && <th className="text-right">XGB</th>}
+                      {family === 'both' && <th className="text-right">RF</th>}
+                      <th className="text-right">Sell risk</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedStocks.length === 0 ? (
+                      <tr>
+                        <td colSpan={family === 'both' ? 9 : 7} className="py-12 text-center text-slate-500">
+                          No symbols match the current filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedStocks.map((stock) => (
+                        <tr key={stock.symbol} onClick={() => navigate(`/stocks/${stock.symbol}`)}>
+                          <td>
+                            <span className="font-semibold text-white">{stock.symbol}</span>
+                          </td>
+                          <td className="text-right tabular-nums">{stock.close.toFixed(2)}</td>
+                          <td className="text-right tabular-nums">{stock.rsi !== null ? stock.rsi.toFixed(1) : '-'}</td>
+                          <td className="min-w-36 text-right">
+                            <SignalMeter value={primaryConfidence(stock)} verdict={stock.verdict ?? 'HOLD'} compact />
+                          </td>
+                          {family === 'both' && (
+                            <td className="text-right tabular-nums">{formatPercent(stock.buy_confidence)}</td>
+                          )}
+                          {family === 'both' && (
+                            <td className="text-right tabular-nums">{formatPercent(stock.rf_confidence)}</td>
+                          )}
+                          <td className="text-right tabular-nums">{formatPercent(stock.sell_confidence)}</td>
+                          <td><VerdictBadge verdict={stock.verdict ?? 'HOLD'} /></td>
+                          <td className="text-slate-500">{stock.date}</td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {filteredStocks.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-5 py-12 text-center text-neutral-500">
-                              No signals match your current filters.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredStocks.map((stock) => (
-                            <tr 
-                              key={stock.symbol}
-                              onClick={() => navigate(`/stocks/${stock.symbol}`)}
-                              className="group cursor-pointer transition-colors hover:bg-white/[0.04]"
-                            >
-                              <td className="px-5 py-4 whitespace-nowrap">
-                                <div className="font-medium text-white group-hover:text-blue-400 transition-colors">
-                                  {stock.symbol}
-                                </div>
-                              </td>
-                              <td className="px-5 py-4 whitespace-nowrap text-right text-neutral-300 tabular-nums">
-                                {stock.close.toFixed(2)}
-                              </td>
-                              <td className="px-5 py-4 whitespace-nowrap text-right text-neutral-300 tabular-nums">
-                                {stock.rsi !== null ? stock.rsi.toFixed(1) : '-'}
-                              </td>
-                              <td className="px-5 py-4 whitespace-nowrap text-right tabular-nums">
-                                <div className="flex items-center justify-end gap-2">
-                                  <div className="w-16 h-1.5 bg-neutral-800 rounded-full overflow-hidden hidden sm:block">
-                                    <div 
-                                      className="h-full rounded-full bg-blue-500" 
-                                      style={{ width: `${Math.min(100, (stock.buy_confidence ?? stock.confidence) * 100)}%`, backgroundColor: getVerdictColor(stock.verdict) }}
-                                    />
-                                  </div>
-                                  <span className="text-white font-medium">
-                                    {((stock.buy_confidence ?? stock.confidence) * 100).toFixed(1)}%
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-5 py-4 whitespace-nowrap text-center">
-                                 <VerdictBadge verdict={stock.verdict} />
-                              </td>
-                              <td className="px-5 py-4 whitespace-nowrap text-sm text-neutral-500">
-                                {stock.date}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )}
+          </section>
+        </section>
 
-            {/* Risk Management & Disclaimers Section */}
-            <div className="mt-8 pt-8 border-t border-white/10">
-              <h2 className="text-2xl font-semibold text-white mb-6">Risk Management & Disclaimers</h2>
-              <RiskPanel />
-            </div>
-          </div>
-        )}
+        <section className="mt-6">
+          <RiskPanel />
+        </section>
 
-        {/* Glossary Modal */}
         <GlossaryModal />
       </main>
     </div>
   )
 }
 
-function TopNav() {
-  const refreshSeconds = Math.round(REFRESH_INTERVAL_MS / 1000)
-  
+function TopNav({
+  family,
+  setFamily,
+  refreshSeconds,
+}: {
+  family: ModelFamily
+  setFamily: (family: ModelFamily) => void
+  refreshSeconds: number
+}) {
   return (
-    <nav className="w-full sticky top-0 z-50 border-b border-white/10 bg-[#050505]/80 backdrop-blur-md">
-      <div className="w-full max-w-7xl pl-8 pr-4 md:pl-16 lg:pl-24">
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center">
-            <span className="font-display font-semibold text-white tracking-tight">
-              {APP_TITLE}
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-neutral-400">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Auto-updating ({refreshSeconds}s)
-            </div>
-          </div>
+    <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#07100d]/90 backdrop-blur-md">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div>
+          <p className="font-display text-base font-semibold text-white">{APP_TITLE}</p>
+          <p className="hidden text-xs text-slate-500 sm:block">Refreshes every {refreshSeconds}s</p>
         </div>
+        <ModelSelector value={family} onChange={setFamily} />
       </div>
     </nav>
   )
 }
 
-function DashboardSkeleton() {
+function StatTile({ label, value, tone }: { label: string; value: string; tone: 'blue' | 'green' | 'amber' | 'red' }) {
   return (
-    <div className="glass-panel rounded-xl p-5 animate-pulse">
-      <div className="h-4 w-24 bg-white/10 rounded mb-4" />
-      <div className="space-y-3">
-        <div className="h-10 bg-white/5 rounded" />
-        <div className="h-10 bg-white/5 rounded" />
-        <div className="h-10 bg-white/5 rounded" />
-      </div>
+    <div className={`stat-tile stat-tile-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }
 
-function KpiRow({ label, value, highlight }: { label: string, value: number, highlight?: 'green' | 'amber' | 'red' }) {
-  const colorClass = 
-    highlight === 'green' ? 'text-emerald-400' :
-    highlight === 'amber' ? 'text-amber-400' :
-    highlight === 'red' ? 'text-red-400' :
-    'text-white'
-  
+function SignalMeter({
+  label,
+  value,
+  verdict,
+  compact = false,
+}: {
+  label?: string
+  value: number | null | undefined
+  verdict: string
+  compact?: boolean
+}) {
+  const width = Math.max(0, Math.min(100, (value ?? 0) * 100))
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-sm text-neutral-400">{label}</span>
-      <span className={`font-medium tabular-nums ${colorClass}`}>
-        {value}
-      </span>
+    <div className={compact ? 'signal-meter signal-meter-compact' : 'signal-meter'}>
+      {label && <span className="text-slate-400">{label}</span>}
+      <div className="signal-meter-track">
+        <div className="signal-meter-fill" data-verdict={verdict} style={{ width: `${width}%` }} />
+      </div>
+      <strong>{formatPercent(value)}</strong>
     </div>
   )
 }
 
 function VerdictBadge({ verdict }: { verdict: string }) {
-  switch (verdict) {
-    case 'BUY':
-      return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-400/30">🟢 BUY</span>
-    case 'MODERATE':
-      return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-400/30">🟠 MOD</span>
-    case 'SELL':
-      return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-400/30">🔴 SELL</span>
-    case 'WEAK_SELL':
-      return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-400/30">🟡 WSL</span>
-    default:
-      return <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-gray-500/20 text-gray-400 border border-gray-400/30">⚪ HOLD</span>
-  }
+  const normalized = verdict === 'WEAK_SELL' ? 'WEAK_SELL' : verdict
+  const label =
+    normalized === 'BUY' ? 'Buy' :
+    normalized === 'MODERATE' ? 'Watch' :
+    normalized === 'SELL' ? 'Sell risk' :
+    normalized === 'WEAK_SELL' ? 'Soft risk' :
+    normalized === 'AVOID' ? 'Avoid' :
+    'Hold'
+
+  return <span className="verdict-badge" data-verdict={normalized}>{label}</span>
 }
 
-function getVerdictColor(verdict: string): string {
-  switch (verdict) {
-    case 'BUY': return '#10b981'      // emerald
-    case 'MODERATE': return '#f59e0b' // amber
-    case 'SELL': return '#ef4444'     // red
-    case 'WEAK_SELL': return '#eab308' // yellow
-    default: return '#9ca3af'         // gray
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '-'
   }
+  return `${(value * 100).toFixed(1)}%`
 }

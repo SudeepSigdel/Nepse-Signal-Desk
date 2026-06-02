@@ -123,6 +123,13 @@ def check_position_exit(request: PositionCheckRequest):
             current_price=request.current_price,
             current_buy_conf=request.current_buy_conf
         )
+
+        status = exit_rules.get_exit_status(
+          entry_date=entry_date,
+          entry_price=request.entry_price,
+          current_price=request.current_price,
+          current_buy_conf=request.current_buy_conf
+        )
         
         return ExitStatusResponse(
             should_exit=exit_signal.should_exit,
@@ -131,8 +138,8 @@ def check_position_exit(request: PositionCheckRequest):
             days_held=exit_signal.days_held,
             days_remaining=max(0, 10 - exit_signal.days_held),
             current_return_pct=exit_signal.exit_return_pct,
-            distance_to_stop_loss_pct=request.current_price / (request.entry_price * 0.95) * 100 - 100,
-            risks=status['risks']
+          distance_to_stop_loss_pct=status['distance_to_stop_loss_pct'],
+          risks=status['risks']
         )
     except Exception as e:
         logger.error(f"Error checking position exit: {e}")

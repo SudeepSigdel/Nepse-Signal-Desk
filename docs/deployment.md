@@ -104,10 +104,12 @@ The repo ships with two workflows:
 Runs every day at **11:15 UTC** (5:00 PM Nepal time):
 1. Checks out repo
 2. Installs Python dependencies
-3. Runs the NEPSE scraper
-4. Runs `automation/daily_pipeline.py --skip-scrape`
+3. Validates Python code with `compileall` and `pytest`
+4. Runs `automation/daily_pipeline.py`
 5. Commits updated data files back to the repo
 6. Uploads pipeline artifacts
+
+The pipeline driver performs scraping when needed and includes both BUY and SELL model training before backtesting and reporting.
 
 Manual trigger: **Actions → Daily Pipeline → Run workflow**
 

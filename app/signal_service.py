@@ -6,10 +6,15 @@ Handles confidence scoring, verdicts, descriptions, and indicator context.
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
 import numpy as np
+import os
 
 from app.data_loader import DataLoader
 from app.constants import THRESHOLD_HIGH, THRESHOLD_MEDIUM, THRESHOLD_LOW
 from app.logging_config import get_logger
+from app.config import settings
+import glob
+import pickle
+import re
 
 logger = get_logger(__name__)
 
@@ -32,34 +37,96 @@ class SignalService:
         self.loader = loader
     
     def compute_confidence(self, symbol: str) -> Optional[float]:
-        """Compute BUY confidence score from model."""
-        latest_row = self.loader.get_latest_row(symbol)
-        if latest_row is None or self.loader.model_buy is None or self.loader.scaler_buy is None:
-            return None
-        
-        try:
-            X = self.loader.scaler_buy.transform(latest_row[self.loader.feature_cols].values.reshape(1, -1))
-            conf = float(self.loader.model_buy.predict_proba(X)[0, 1])
-            return round(conf, 4)
-        except Exception as e:
-            logger.error(f"Error computing BUY confidence for {symbol}: {e}")
-            return None
-    
-    def compute_sell_confidence(self, symbol: str) -> Optional[float]:
-        """Compute SELL confidence score from SELL model (if available)."""
-        if self.loader.model_sell is None or self.loader.scaler_sell is None:
-            return None
-        
+        """Compute BUY confidence score from default (loaded) model."""
+        return self.compute_confidence_for_family(symbol, None)
+
+    def compute_confidence_for_family(self, symbol: str, family: Optional[str]) -> Optional[float]:
+        """Compute BUY confidence using a specific model family (xgboost or random_forest).
+
+        If family is None, use the loader's default in-memory model.
+        """
         latest_row = self.loader.get_latest_row(symbol)
         if latest_row is None:
             return None
-        
+
+        if family is None:
+            model = self.loader.model_buy
+            scaler = self.loader.scaler_buy
+            features = self.loader.feature_cols
+        else:
+            bundle = self.loader.get_bundle_for_family(family)
+            if not bundle:
+                return None
+            model = bundle.get("model")
+            scaler = bundle.get("scaler")
+            features = bundle.get("features")
+
+        if model is None or scaler is None or features is None:
+            return None
+
         try:
-            X = self.loader.scaler_sell.transform(latest_row[self.loader.feature_cols].values.reshape(1, -1))
-            conf = float(self.loader.model_sell.predict_proba(X)[0, 1])
+            X = scaler.transform(latest_row[features].values.reshape(1, -1))
+            conf = float(model.predict_proba(X)[0, 1])
             return round(conf, 4)
         except Exception as e:
-            logger.error(f"Error computing SELL confidence for {symbol}: {e}")
+            logger.error(f"Error computing BUY confidence for {symbol} (family={family}): {e}")
+            return None
+    
+    def compute_sell_confidence(self, symbol: str) -> Optional[float]:
+        """Compute SELL confidence using default loaded SELL model."""
+        return self.compute_sell_confidence_for_family(symbol, None)
+
+    def compute_sell_confidence_for_family(self, symbol: str, family: Optional[str]) -> Optional[float]:
+        """Compute SELL confidence using a specific family. If family is None, use in-memory SELL model."""
+        latest_row = self.loader.get_latest_row(symbol)
+        if latest_row is None:
+            return None
+
+        if family is None:
+            model = self.loader.model_sell
+            scaler = self.loader.scaler_sell
+            features = self.loader.feature_cols
+        else:
+            # Look for a sell model for the family (filename suffix _sell)
+            bundle = self.loader.get_bundle_for_family(family)
+            if not bundle:
+                return None
+            # For sell, expect file with _sell; the bundle loader returns BUY models only,
+            # so attempt to load sell model by pattern here
+            suffix = "" if family == "xgboost" else "_rf"
+            sell_path = None
+            sell_pattern = f"model_fold*{suffix}_sell.pkl"
+            candidates = glob.glob(str(settings.model_dir / sell_pattern))
+            if not suffix:
+                candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
+            if candidates:
+                def _fold_num(p):
+                    m = re.search(rf"model_fold(\d+){re.escape(suffix)}_sell\.pkl$", os.path.basename(p))
+                    return int(m.group(1)) if m else -1
+                sell_path = max(candidates, key=_fold_num)
+
+            if sell_path:
+                try:
+                    with open(sell_path, "rb") as f:
+                        sb = pickle.load(f)
+                        model = sb.get("model")
+                        scaler = sb.get("scaler")
+                        features = sb.get("feature_cols") or sb.get("features")
+                except Exception as e:
+                    logger.error(f"Failed loading SELL model for family {family}: {e}")
+                    return None
+            else:
+                return None
+
+        if model is None or scaler is None or features is None:
+            return None
+
+        try:
+            X = scaler.transform(latest_row[features].values.reshape(1, -1))
+            conf = float(model.predict_proba(X)[0, 1])
+            return round(conf, 4)
+        except Exception as e:
+            logger.error(f"Error computing SELL confidence for {symbol} (family={family}): {e}")
             return None
     
     def get_tier(self, confidence: float) -> str:
@@ -186,18 +253,21 @@ class SignalService:
         
         return verdict, color, description
     
-    def get_signal(self, symbol: str) -> Optional[Dict]:
-        """Get complete signal for a stock (BUY + SELL models)."""
+    def get_signal(self, symbol: str, family: Optional[str] = None) -> Optional[Dict]:
+        """Get complete signal for a stock (BUY + SELL models).
+
+        If `family` is provided, compute confidences using that model family.
+        """
         latest_row = self.loader.get_latest_row(symbol)
         if latest_row is None:
             return None
         
-        buy_confidence = self.compute_confidence(symbol)
+        buy_confidence = self.compute_confidence_for_family(symbol, family) if family else self.compute_confidence(symbol)
         if buy_confidence is None:
             return None
         
         # SELL confidence is optional (if SELL model not available, remains None)
-        sell_confidence = self.compute_sell_confidence(symbol)
+        sell_confidence = self.compute_sell_confidence_for_family(symbol, family) if family else self.compute_sell_confidence(symbol)
         
         verdict, color, description = self.get_verdict(buy_confidence, sell_confidence)
         indicators = self.get_indicator_context(latest_row)

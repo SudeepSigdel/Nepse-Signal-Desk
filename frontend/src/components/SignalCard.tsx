@@ -3,10 +3,7 @@
  * Shows 5-level verdict (BUY/MODERATE/SELL/WEAK_SELL/HOLD) with dual confidence scores
  */
 
-import React from 'react'
-
 interface SignalCardProps {
-  verdict: string
   verdict_color: string
   buy_confidence: number
   sell_confidence?: number | null
@@ -16,7 +13,6 @@ interface SignalCardProps {
 }
 
 export function SignalCard({ 
-  verdict, 
   verdict_color, 
   buy_confidence,
   sell_confidence,

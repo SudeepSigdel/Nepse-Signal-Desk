@@ -132,12 +132,12 @@ class ExitRulesService:
         # Rule 3: SIGNAL DECAY EXIT
         # ─────────────────────────────────────────────────────────────────
         # Model's BUY confidence has weakened. Edge may be gone.
-        # Exit if buy_conf drops below minimum threshold.
+        # Exit if buy_conf drops to or below the minimum threshold.
         
-        if current_buy_conf < self.min_buy_conf:
+        if current_buy_conf <= self.min_buy_conf:
             return ExitSignal(
                 should_exit=True,
-                reason=f"Buy signal weakened: confidence {current_buy_conf:.2f} < threshold {self.min_buy_conf:.2f}",
+                reason=f"Buy signal weakened: confidence {current_buy_conf:.2f} <= threshold {self.min_buy_conf:.2f}",
                 reason_type="signal_decay",
                 days_held=days_held,
                 exit_return_pct=self._calculate_return(entry_price, current_price)

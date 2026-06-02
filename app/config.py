@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # random_forest switches the pipeline to sklearn's RandomForestClassifier.
     model_family: str = "xgboost"
 
+    # Stock universe quality gates. These keep very thin symbols out of the
+    # dashboard while still showing all model-ready liquid stocks.
+    liquidity_lookback_days: int = 252
+    min_liquid_trading_days: int = 120
+    min_median_turnover: float = 50000.0
+    min_median_volume: float = 100.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

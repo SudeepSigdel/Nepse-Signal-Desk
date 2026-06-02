@@ -77,10 +77,12 @@ Two workflows handle CI automation:
 
 1. Checks out repo with write token
 2. Sets up Python and installs `requirements.txt`
-3. Runs the NEPSE scraper (`scrapper/`)
-4. Runs `automation/daily_pipeline.py --skip-scrape`
+3. Validates Python code with `compileall` and `pytest`
+4. Runs `automation/daily_pipeline.py` for the full scrape + train + backtest + reporting flow
 5. Commits updated data files back to the repo
 6. Uploads pipeline outputs as GitHub artifacts
+
+This keeps the scheduled run aligned with the codebase, including the BUY and SELL model branches.
 
 **Manual trigger:** Actions → Daily Pipeline → Run workflow
 

@@ -92,6 +92,7 @@ def main() -> int:
         "04_label_construction.py",
         "05_walk_forward_setup.py",
         "06_train_model.py",
+        "06b_train_sell_model.py",
         "07_backtest.py",
         "08_reporting.py",
     ]

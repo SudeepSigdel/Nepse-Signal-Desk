@@ -55,6 +55,7 @@ class DataLoader:
         self.features_df = None
         self.all_symbols = []
         self.model_family = _normalize_model_family(settings.model_family)
+        self._family_bundles: Dict[str, Dict[str, Any]] = {}
         
         self._load_all()
         self._initialized = True
@@ -206,4 +207,46 @@ class DataLoader:
     def scaler(self):
         """Backward compatibility: return BUY scaler."""
         return self.scaler_buy
+
+    def get_bundle_for_family(self, family: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Return a loaded model bundle for the requested family.
+
+        The bundle contains keys: 'model', 'scaler', 'features'. Caches results per instance.
+        """
+        fam = _normalize_model_family(family)
+        cached_bundle = self._family_bundles.get(fam)
+        if cached_bundle is not None:
+            return cached_bundle
+
+        suffix = _family_suffix(fam)
+        # Search for latest BUY model for this family
+        buy_pattern = f"model_fold*{suffix}.pkl"
+        candidates = glob.glob(str(settings.model_dir / buy_pattern))
+        candidates = [p for p in candidates if "_sell" not in os.path.basename(p)]
+        if not suffix:
+            candidates = [p for p in candidates if "_rf" not in os.path.basename(p)]
+
+        if not candidates:
+            logger.warning(f"No model files found for family '{fam}'")
+            self._family_bundles[fam] = None
+            return None
+
+        def _fold_num(path):
+            m = re.search(rf"model_fold(\d+){re.escape(suffix)}\.pkl$", os.path.basename(path))
+            return int(m.group(1)) if m else -1
+
+        model_path = max(candidates, key=_fold_num)
+        try:
+            with open(model_path, "rb") as f:
+                bundle = pickle.load(f)
+                # Normalise keys
+                features = bundle.get("feature_cols") or bundle.get("features")
+                result = {"model": bundle.get("model"), "scaler": bundle.get("scaler"), "features": features}
+                self._family_bundles[fam] = result
+                logger.info(f"Loaded model bundle for family '{fam}' from {model_path}")
+                return result
+        except Exception as e:
+            logger.error(f"Failed loading model bundle for family '{fam}': {e}")
+            self._family_bundles[fam] = None
+            return None
 

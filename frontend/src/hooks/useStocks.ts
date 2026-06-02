@@ -9,7 +9,7 @@ type CacheEntry<T> = {
   timestamp: number
 }
 
-const stocksCache: { entry: CacheEntry<Stock[]> | null } = { entry: null }
+const stocksCache: Map<string | null, CacheEntry<Stock[]> | null> = new Map()
 const stockDetailCache = new Map<string, CacheEntry<StockDetail>>()
 const signalCache = new Map<string, CacheEntry<SignalDetail>>()
 
@@ -20,6 +20,7 @@ export interface Stock {
   rsi: number | null
   confidence: number
   buy_confidence?: number
+  rf_confidence?: number | null
   sell_confidence?: number | null
   tier: string
   verdict?: string
@@ -32,6 +33,7 @@ export interface ApiStock {
   rsi?: number | null
   confidence: number
   buy_confidence?: number
+  rf_confidence?: number | null
   sell_confidence?: number | null
   tier: string
   verdict?: string
@@ -50,11 +52,12 @@ const normalizeStock = (stock: ApiStock): Stock => ({
   confidence: stock.confidence,
   buy_confidence: stock.buy_confidence ?? stock.confidence,
   sell_confidence: stock.sell_confidence ?? null,
+  rf_confidence: stock.rf_confidence ?? null,
   tier: stock.tier,
   verdict: stock.verdict,
 })
 
-export const useStocks = (refreshInterval: number = 30000) => {
+export const useStocks = (refreshInterval: number = 30000, family?: string) => {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -65,24 +68,23 @@ export const useStocks = (refreshInterval: number = 30000) => {
     const fetchStocks = async () => {
       try {
         setLoading(true)
-
-        if (stocksCache.entry && Date.now() - stocksCache.entry.timestamp < CACHE_TTL_MS) {
-          setStocks(stocksCache.entry.data)
+        const cacheKey = family ?? 'default'
+        const cachedEntry = stocksCache.get(cacheKey)
+        if (cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL_MS) {
+          setStocks(cachedEntry.data)
           setError(null)
           return
         }
 
-        const response = await axios.get<StockResponse>(`${API_BASE_URL}/api/stocks`)
+        const params = family ? { params: { family } } : undefined
+        const response = await axios.get<StockResponse>(`${API_BASE_URL}/api/stocks`, params)
         const normalized = response.data.stocks.map(normalizeStock)
         if (!cancelled) {
           setStocks(normalized)
           setError(null)
         }
         // Update cache after a successful fetch
-        stocksCache.entry = {
-          data: normalized,
-          timestamp: Date.now(),
-        }
+        stocksCache.set(cacheKey, { data: normalized, timestamp: Date.now() })
       } catch (err) {
         console.error('Error fetching stocks:', err)
         if (!cancelled) {
@@ -102,7 +104,7 @@ export const useStocks = (refreshInterval: number = 30000) => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [refreshInterval])
+  }, [refreshInterval, family])
 
   return { stocks, loading, error }
 }
@@ -215,7 +217,7 @@ export interface SignalDetail {
   }
 }
 
-export const useSignal = (symbol: string) => {
+export const useSignal = (symbol: string, family?: string) => {
   const [signal, setSignal] = useState<SignalDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -224,7 +226,8 @@ export const useSignal = (symbol: string) => {
     if (!symbol) return
 
     let cancelled = false
-    const cacheKey = symbol.toUpperCase()
+    const familyKey = family === 'both' ? 'default' : (family ?? 'default')
+    const cacheKey = `${symbol.toUpperCase()}:${familyKey}`
 
     const fetchSignal = async () => {
       try {
@@ -236,7 +239,8 @@ export const useSignal = (symbol: string) => {
           return
         }
 
-        const response = await axios.get<SignalDetail>(`${API_BASE_URL}/api/signal/${symbol}`)
+        const params = family && family !== 'both' ? { params: { family } } : undefined
+        const response = await axios.get<SignalDetail>(`${API_BASE_URL}/api/signal/${symbol}`, params)
         if (!cancelled) {
           setSignal(response.data)
           setError(null)
@@ -258,7 +262,7 @@ export const useSignal = (symbol: string) => {
     return () => {
       cancelled = true
     }
-  }, [symbol])
+  }, [symbol, family])
 
   return { signal, loading, error }
 }

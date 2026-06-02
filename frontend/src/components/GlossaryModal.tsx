@@ -3,7 +3,7 @@
  * Click the ? icons throughout the app to learn what things mean.
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 export function GlossaryModal() {
   const [isOpen, setIsOpen] = useState(false)

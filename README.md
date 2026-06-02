@@ -188,8 +188,10 @@ To switch the pipeline to Random Forest, set `MODEL_FAMILY=rf` before running th
 
 GitHub Actions runs the full pipeline daily at **11:15 UTC (5:00 PM Nepal time)**:
 
-- `.github/workflows/daily-pipeline.yml` — scrapes data, runs pipeline, commits results
+- `.github/workflows/daily-pipeline.yml` — validates Python code, runs the full pipeline driver, commits results
 - `.github/workflows/keep-alive.yml` — weekly commit to prevent GitHub disabling scheduled workflows
+
+The daily pipeline now covers the BUY model, SELL model, backtest, and reporting steps in one run.
 
 See [`docs/deployment.md`](docs/deployment.md) for Render deployment instructions.
 

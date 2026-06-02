@@ -42,13 +42,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run scraper
+      - name: Validate Python code
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          echo "Starting NEPSE scraper at $(date -u)"
-          python "scrapper/Nepse Scraper.py" --source sharesansar --delay 0.2
-          echo "Scraper completed at $(date -u)"
+          python -m pip install pytest
+          python -m compileall app src automation scrapper
+          python -m pytest app/test_exit_rules.py -q
 
       - name: Run daily pipeline
         env:
@@ -56,7 +56,7 @@ jobs:
           PYTHONUNBUFFERED: '1'
         run: |
           echo "Starting daily pipeline at $(date -u)"
-          python automation/daily_pipeline.py --source sharesansar --delay 0.2 --skip-scrape
+          python automation/daily_pipeline.py --source sharesansar --delay 0.2
           echo "Pipeline completed at $(date -u)"
 
       - name: Commit updated data

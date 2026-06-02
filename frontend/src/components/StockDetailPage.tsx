@@ -1,7 +1,10 @@
 import React, { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { APP_TITLE, API_BASE_URL } from '../config'
+import { API_BASE_URL } from '../config'
+import axios from 'axios'
 import { useSignal, useStockDetail } from '../hooks/useStocks'
+import { useModelFamily } from '../modelFamily'
+import ModelSelector from './ModelSelector'
 import StockChart from './StockChart'
 import { SignalCard } from './SignalCard'
 import { PositionExitGuidance, type ExitStatus } from './PositionExitGuidance'
@@ -9,8 +12,29 @@ import { PositionExitGuidance, type ExitStatus } from './PositionExitGuidance'
 export default function StockDetailPage() {
   const { symbol = '' } = useParams()
   const navigate = useNavigate()
+  const [familySelection, setFamilySelection] = useModelFamily()
   const { detail, loading: detailLoading, error: detailError } = useStockDetail(symbol)
-  const { signal, loading: signalLoading, error: signalError } = useSignal(symbol)
+  const { signal, loading: signalLoading, error: signalError } = useSignal(symbol, familySelection)
+
+  const [bothSignals, setBothSignals] = useState<{ xgboost?: any, random_forest?: any } | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    const fetchBoth = async () => {
+      if (familySelection !== 'both') {
+        setBothSignals(null)
+        return
+      }
+      try {
+        const resp = await axios.get(`${API_BASE_URL}/api/signal/${symbol}/both`)
+        if (!cancelled) setBothSignals(resp.data)
+      } catch (err) {
+        console.error('Error fetching combined signals', err)
+      }
+    }
+    fetchBoth()
+    return () => { cancelled = true }
+  }, [familySelection, symbol])
   
   // Position tracking state
   const [userEntryDate, setUserEntryDate] = useState('')
@@ -20,9 +44,12 @@ export default function StockDetailPage() {
 
   const isLoading = detailLoading || signalLoading
   const error = detailError || signalError
-  const latestClose = detail?.candles.at(-1)?.c ?? null
-  const latestRsi = detail?.indicators.rsi.at(-1) ?? null
-  const latestMacd = detail?.indicators.macd.at(-1) ?? null
+  const candles = detail?.candles ?? []
+  const rsiValues = detail?.indicators.rsi ?? []
+  const macdValues = detail?.indicators.macd ?? []
+  const latestClose = candles.length > 0 ? candles[candles.length - 1]?.c ?? null : null
+  const latestRsi = rsiValues.length > 0 ? rsiValues[rsiValues.length - 1] ?? null : null
+  const latestMacd = macdValues.length > 0 ? macdValues[macdValues.length - 1] ?? null : null
 
   const checkExitStatus = useCallback(async () => {
     if (!userEntryDate || !userEntryPrice || !latestClose || !signal?.buy_confidence) return
@@ -79,6 +106,9 @@ export default function StockDetailPage() {
             <div className="font-display font-semibold text-white tracking-tight text-lg">
               {symbol.toUpperCase()} <span className="text-neutral-500 font-normal">| Research</span>
             </div>
+            <div className="ml-auto hidden md:block">
+              <ModelSelector value={familySelection} onChange={setFamilySelection} />
+            </div>
           </div>
         </div>
       </nav>
@@ -109,7 +139,6 @@ export default function StockDetailPage() {
             {/* AI Signal Analysis */}
             {signal && (
               <SignalCard 
-                verdict={signal.verdict}
                 verdict_color={signal.verdict_color}
                 buy_confidence={signal.buy_confidence}
                 sell_confidence={signal.sell_confidence}
@@ -119,9 +148,29 @@ export default function StockDetailPage() {
               />
             )}
 
+            {familySelection === 'both' && bothSignals && (
+              <div className="surface-panel p-4">
+                <h4 className="section-kicker mb-3">Model comparison</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {bothSignals.xgboost && (
+                    <div className="comparison-tile">
+                      <span>XGBoost buy</span>
+                      <strong>{(bothSignals.xgboost.buy_confidence * 100).toFixed(1)}%</strong>
+                    </div>
+                  )}
+                  {bothSignals.random_forest && (
+                    <div className="comparison-tile">
+                      <span>Random Forest buy</span>
+                      <strong>{(bothSignals.random_forest.buy_confidence * 100).toFixed(1)}%</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Your Position Input */}
-            <div className="glass-panel rounded-xl p-5 stagger-in">
-              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <div className="surface-panel p-5 stagger-in">
+              <h3 className="mb-4 flex items-center gap-2 font-semibold text-white">
                 💼 Track Your Position
               </h3>
               <p className="text-neutral-400 text-sm mb-4">

@@ -35,6 +35,43 @@ exit_rules = ExitRulesService(
 )
 
 
+def _is_liquid_enough(loader: DataLoader, symbol: str) -> bool:
+    """Return True when a symbol has enough recent trading activity for display."""
+    stock_df = loader.get_stock_data(symbol, settings.liquidity_lookback_days)
+    if stock_df is None or stock_df.empty:
+        return False
+
+    traded = stock_df.dropna(subset=["Close", "Volume"]).copy()
+    traded = traded[(traded["Close"] > 0) & (traded["Volume"] > 0)]
+    if len(traded) < settings.min_liquid_trading_days:
+        return False
+
+    turnover = traded.get("Turnover")
+    if turnover is None:
+        turnover = traded["Close"] * traded["Volume"]
+    else:
+        turnover = turnover.fillna(traded["Close"] * traded["Volume"])
+
+    return (
+        float(traded["Volume"].median()) >= settings.min_median_volume
+        and float(turnover.median()) >= settings.min_median_turnover
+    )
+
+
+def _verdict_code(buy_confidence: float, sell_confidence: float | None) -> str:
+    if buy_confidence >= 0.65:
+        return "BUY"
+    if buy_confidence >= 0.55:
+        return "MODERATE"
+    if sell_confidence is not None and sell_confidence >= 0.65:
+        return "SELL"
+    if sell_confidence is not None and sell_confidence >= 0.55:
+        return "WEAK_SELL"
+    if buy_confidence >= THRESHOLD_LOW:
+        return "HOLD"
+    return "AVOID"
+
+
 # ══════════════════════════════════════════════════════════════════
 # HEALTH CHECK
 # ══════════════════════════════════════════════════════════════════
@@ -59,8 +96,8 @@ def health_check():
 # ══════════════════════════════════════════════════════════════════
 
 @stocks_router.get("/api/stocks", response_model=StocksListResponse)
-def get_stocks():
-    """Get all stocks above confidence threshold, ranked by confidence."""
+def get_stocks(family: str | None = None):
+    """Get all liquid, model-ready stocks, ranked by BUY confidence."""
     loader = DataLoader()
     signal_service = SignalService(loader)
     
@@ -70,27 +107,90 @@ def get_stocks():
     results = []
     
     for symbol in loader.all_symbols:
-        confidence = signal_service.compute_confidence(symbol)
-        if confidence is None or confidence < THRESHOLD_LOW:
+        if not _is_liquid_enough(loader, symbol):
             continue
-        
+
         latest_row = loader.get_latest_row(symbol)
         if latest_row is None:
             continue
-        
-        tier = signal_service.get_tier(confidence)
-        
-        results.append(StockData(
-            symbol=symbol,
-            date=latest_row["Date"].strftime("%Y-%m-%d"),
-            close=safe_val(latest_row.get("Close")),
-            rsi=safe_val(latest_row.get("RSI_14")),
-            confidence=confidence,
-            tier=tier
-        ))
+
+        if family == 'both':
+            conf_x = signal_service.compute_confidence_for_family(symbol, 'xgboost')
+            conf_rf = signal_service.compute_confidence_for_family(symbol, 'random_forest')
+            if conf_x is None and conf_rf is None:
+                continue
+            available = [conf for conf in [conf_x, conf_rf] if conf is not None]
+            confidence = round(sum(available) / len(available), 4)
+            sell_confidence = signal_service.compute_sell_confidence_for_family(symbol, 'xgboost')
+            tier = signal_service.get_tier(confidence)
+            results.append(StockData(
+                symbol=symbol,
+                date=latest_row["Date"].strftime("%Y-%m-%d"),
+                close=safe_val(latest_row.get("Close")),
+                rsi=safe_val(latest_row.get("RSI_14")),
+                confidence=confidence,
+                buy_confidence=conf_x,
+                rf_confidence=conf_rf,
+                sell_confidence=sell_confidence,
+                verdict=_verdict_code(confidence, sell_confidence),
+                tier=tier
+            ))
+        elif family:
+            confidence = signal_service.compute_confidence_for_family(symbol, family)
+            if confidence is None:
+                continue
+            sell_confidence = signal_service.compute_sell_confidence_for_family(symbol, family)
+            tier = signal_service.get_tier(confidence)
+            results.append(StockData(
+                symbol=symbol,
+                date=latest_row["Date"].strftime("%Y-%m-%d"),
+                close=safe_val(latest_row.get("Close")),
+                rsi=safe_val(latest_row.get("RSI_14")),
+                confidence=confidence,
+                buy_confidence=confidence,
+                sell_confidence=sell_confidence,
+                verdict=_verdict_code(confidence, sell_confidence),
+                tier=tier
+            ))
+        else:
+            confidence = signal_service.compute_confidence(symbol)
+            if confidence is None:
+                continue
+            sell_confidence = signal_service.compute_sell_confidence(symbol)
+            tier = signal_service.get_tier(confidence)
+            results.append(StockData(
+                symbol=symbol,
+                date=latest_row["Date"].strftime("%Y-%m-%d"),
+                close=safe_val(latest_row.get("Close")),
+                rsi=safe_val(latest_row.get("RSI_14")),
+                confidence=confidence,
+                buy_confidence=confidence,
+                sell_confidence=sell_confidence,
+                verdict=_verdict_code(confidence, sell_confidence),
+                tier=tier
+            ))
     
     results.sort(key=lambda x: x.confidence, reverse=True)
     return StocksListResponse(stocks=results, count=len(results))
+
+
+@signals_router.get("/api/signal/{symbol}/both")
+def get_signal_both(symbol: str):
+    """Return signal payloads for both model families in one response."""
+    loader = DataLoader()
+    signal_service = SignalService(loader)
+
+    symbol = symbol.upper()
+    if symbol not in loader.all_symbols:
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
+
+    x = signal_service.get_signal(symbol, 'xgboost')
+    rf = signal_service.get_signal(symbol, 'random_forest')
+
+    return {
+        'xgboost': x,
+        'random_forest': rf,
+    }
 
 
 @stocks_router.get("/api/stocks/{symbol}", response_model=StockDetailResponse)
@@ -166,7 +266,7 @@ def get_stock_details(symbol: str, days: int = 180):
 # ══════════════════════════════════════════════════════════════════
 
 @signals_router.get("/api/signal/{symbol}", response_model=SignalResponse)
-def get_signal(symbol: str):
+def get_signal(symbol: str, family: str | None = None):
     """Get ML confidence score and signal interpretation for a stock."""
     loader = DataLoader()
     signal_service = SignalService(loader)
@@ -176,7 +276,7 @@ def get_signal(symbol: str):
     if symbol not in loader.all_symbols:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
     
-    signal_data = signal_service.get_signal(symbol)
+    signal_data = signal_service.get_signal(symbol, family)
     if signal_data is None:
         raise HTTPException(status_code=404, detail=f"Insufficient data for symbol '{symbol}'")
     
@@ -184,7 +284,7 @@ def get_signal(symbol: str):
 
 
 @signals_router.get("/api/summary", response_model=SummaryResponse)
-def get_summary():
+def get_summary(family: str | None = None):
     """Get top 10 high-confidence signals across all stocks."""
     loader = DataLoader()
     signal_service = SignalService(loader)
@@ -195,7 +295,10 @@ def get_summary():
     results = []
     
     for symbol in loader.all_symbols:
-        confidence = signal_service.compute_confidence(symbol)
+        if family:
+            confidence = signal_service.compute_confidence_for_family(symbol, family)
+        else:
+            confidence = signal_service.compute_confidence(symbol)
         if confidence is None or confidence < THRESHOLD_MEDIUM:
             continue
         

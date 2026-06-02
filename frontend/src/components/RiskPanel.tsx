@@ -3,7 +3,7 @@
  * Shows disclaimers, accuracy info, and portfolio tips
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 export function RiskPanel() {
   const [isExpanded, setIsExpanded] = useState(false)

@@ -32,6 +32,10 @@ class StockData(BaseModel):
     close: Optional[float]
     rsi: Optional[float]
     confidence: float
+    buy_confidence: Optional[float] = None
+    rf_confidence: Optional[float] = None
+    sell_confidence: Optional[float] = None
+    verdict: Optional[str] = None
     tier: str  # High, Medium, Neutral, Low
 
 
