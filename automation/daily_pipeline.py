@@ -11,6 +11,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run NEPSE scrape + full ML pipeline in sequence.")
     parser.add_argument("--source", choices=["auto", "sharesansar", "merolagani"], default="sharesansar")
     parser.add_argument("--symbols", default="", help="Optional comma-separated symbols.")
+    parser.add_argument("--start-date", default="", help="Optional YYYY-MM-DD to pass to the scraper (global start date).")
     parser.add_argument("--delay", type=float, default=0.2, help="Per-symbol delay for scraper.")
     parser.add_argument("--skip-scrape", action="store_true", help="Skip scraping step.")
     parser.add_argument("--skip-parquet", action="store_true", help="Pass --skip-parquet to scraper.")
@@ -77,6 +78,9 @@ def main() -> int:
             "--delay",
             str(args.delay),
         ]
+        # Forward optional start-date to the scraper so automation can control the global window
+        if args.start_date:
+            scrape_cmd.extend(["--start-date", args.start_date])
         if args.symbols.strip():
             scrape_cmd.extend(["--symbols", args.symbols.strip()])
         if args.skip_parquet:
