@@ -1,4 +1,0 @@
-Threshold,Trades,Win Rate %,Profit Factor,Mean Ret/Trade %,Sharpe (ann.),Signal-only PF,PF Lift vs Signal-only
-0.55,14843,45.3,1.257,0.9581,0.393,0.749,0.508
-0.6,4538,49.3,1.588,2.0196,0.761,0.749,0.839
-0.65,1267,48.7,1.834,2.8614,0.893,0.749,1.085

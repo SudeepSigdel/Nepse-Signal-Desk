@@ -1,4 +1,0 @@
-Strategy,Trades,Win Rate %,Profit Factor,Mean Ret %,Total Ret %,Sharpe,Max DD %
-ML-validated,23771,42.0,1.08,0.3016,7168.4,0.133,-100.0
-Signal-only,12456,38.76,0.749,-0.8517,-10608.82,-0.505,-100.0
-Always-in,130481,38.17,0.827,-0.5824,-75988.23,-0.328,-100.0

@@ -1,6 +1,27 @@
 # Python
 __pycache__/
 *.py[cod]
+venv/
+
+# Data artifacts and outputs
+data/processed/
+outputs/
+*.parquet
+*.pkl
+
+# Generated reports/images
+*.png
+*.svg
+
+# OS / editor
+Microsoft/
+.vscode/
+
+# Node
+node_modules/
+# Python
+__pycache__/
+*.py[cod]
 *$py.class
 *.so
 .Python
