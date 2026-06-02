@@ -66,6 +66,7 @@ outputs/logs/
 
 # Temporary files
 *.tmp
+*.bundle
 .cache/
 .pytest_cache/
 
