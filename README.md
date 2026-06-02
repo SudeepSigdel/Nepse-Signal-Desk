@@ -191,7 +191,7 @@ The scraper uses a global start date plus a per-symbol warmup window. The per-sy
 
 ## CI / CD
 
-GitHub Actions runs the full pipeline daily at **11:15 UTC (5:00 PM Nepal time)**:
+GitHub Actions runs the full pipeline daily at **12:15 UTC (6:00 PM Nepal time)**:
 
 - `.github/workflows/daily-pipeline.yml` — validates Python code, runs the full pipeline driver, commits results
 - `.github/workflows/keep-alive.yml` — weekly commit to prevent GitHub disabling scheduled workflows

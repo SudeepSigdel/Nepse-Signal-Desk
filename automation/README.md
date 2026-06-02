@@ -79,7 +79,7 @@ Training (`06` and `06b`) is the slow step — expect 10–30 minutes depending 
 
 Two workflows handle CI automation:
 
-### `daily-pipeline.yml` — runs at 11:15 UTC (5:00 PM Nepal)
+### `daily-pipeline.yml` — runs at 12:15 UTC (6:00 PM Nepal)
 
 1. Checks out repo with write token
 2. Sets up Python and installs `requirements.txt`

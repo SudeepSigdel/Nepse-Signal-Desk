@@ -4,6 +4,7 @@ import os
 import re
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,7 @@ DEFAULT_START_DATE = datetime(2020, 1, 1)
 DEFAULT_DELAY = 1.0
 WARMUP_DAYS = 60
 START_DATE_ENV_VAR = "NEPSE_SCRAPER_START_DATE"
+NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 # Sharesansar's endpoint returns empty payloads for large 'length' values.
 SHARESANSAR_PAGE_SIZE = 20
 
@@ -342,6 +344,12 @@ def fetch_data(symbol, start_dt, end_dt, source):
     return fetch_merolagani(symbol, start_dt, end_dt)
 
 
+def nepal_today_end() -> datetime:
+    """Return today's Nepal date at end-of-day as a naive datetime for source APIs."""
+    nepal_now = datetime.now(NEPAL_TZ)
+    return nepal_now.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=None)
+
+
 def compute_indicators(df):
     df = df.sort_values("Date").copy()
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
@@ -458,7 +466,7 @@ def main():
     except ValueError:
         raise ValueError(f"--start-date must be in YYYY-MM-DD format (or set {START_DATE_ENV_VAR})")
 
-    today = datetime.today()
+    today = nepal_today_end()
     symbols = resolve_symbols(args.raw_dir, args.symbols)
 
     log.info("=" * 64)

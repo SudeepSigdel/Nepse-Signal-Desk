@@ -77,7 +77,7 @@ Without persistent storage, a redeploy will lose generated artifacts and degrade
 
 ### 4. Daily Pipeline (Cron Job)
 
-Create a Render Cron Job that runs once per day after NEPSE market close (~11:15 UTC / 5 PM Nepal):
+Create a Render Cron Job that runs once per day after NEPSE market close (~12:15 UTC / 6 PM Nepal):
 
 **Command:**
 ```bash
@@ -101,7 +101,7 @@ The repo ships with two workflows:
 
 ### `daily-pipeline.yml`
 
-Runs every day at **11:15 UTC** (5:00 PM Nepal time):
+Runs every day at **12:15 UTC** (6:00 PM Nepal time):
 1. Checks out repo
 2. Installs Python dependencies
 3. Validates Python code with `compileall` and `pytest`
