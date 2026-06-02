@@ -90,40 +90,7 @@ def health_check():
         symbols_count=len(loader.all_symbols),
     )
 
-import os
-import glob
-import pandas as pd
-import pickle
-import traceback
 
-@health_router.get("/debug")
-def debug_info():
-    loader = DataLoader()
-    
-    data_dir = str(settings.data_processed_dir)
-    models_dir = str(settings.model_dir)
-    
-    parquet_err = "OK"
-    model_err = "OK"
-    
-    try:
-        df = pd.read_parquet(os.path.join(data_dir, "all_stocks_features.parquet"))
-    except Exception as e:
-        parquet_err = traceback.format_exc()
-        
-    try:
-        with open(os.path.join(models_dir, "model_latest_rf.pkl"), "rb") as f:
-            bundle = pickle.load(f)
-    except Exception as e:
-        model_err = traceback.format_exc()
-        
-    return {
-        "is_ready": loader.is_ready(),
-        "parquet_error": parquet_err,
-        "model_error": model_err,
-        "data_files": os.listdir(data_dir) if os.path.exists(data_dir) else [],
-        "model_files": os.listdir(models_dir) if os.path.exists(models_dir) else []
-    }
 
 
 # ══════════════════════════════════════════════════════════════════
