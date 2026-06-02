@@ -22,6 +22,12 @@ Scripts for orchestrating the NEPSE data pipeline locally and in CI.
 python automation/daily_pipeline.py
 ```
 
+Override the scraper's global start date when needed:
+
+```bash
+python automation/daily_pipeline.py --start-date 2020-01-01
+```
+
 ### Skip scraping (use existing raw data)
 
 ```bash
@@ -102,6 +108,8 @@ Features:
 - Incremental updates (only fetches missing dates)
 - Retry logic with exponential backoff
 - Rebuilds the combined parquet file after each run
+- Global start date can be set with `--start-date` or `NEPSE_SCRAPER_START_DATE`
+- Per-symbol logs may start later than the global start because the scraper rewinds each symbol by a warmup window when existing CSVs already have data
 
 ---
 

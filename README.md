@@ -166,6 +166,9 @@ python automation/daily_pipeline.py
 # Skip scrape (use existing data)
 python automation/daily_pipeline.py --skip-scrape
 
+# Set a custom scraper window (also honored by NEPSE_SCRAPER_START_DATE)
+python automation/daily_pipeline.py --start-date 2020-01-01
+
 # Individual steps
 cd src
 python 01_data_audit.py
@@ -181,6 +184,8 @@ python 08_reporting.py
 ```
 
 To switch the pipeline to Random Forest, set `MODEL_FAMILY=rf` before running the training and evaluation scripts.
+
+The scraper uses a global start date plus a per-symbol warmup window. The per-symbol log line can therefore start later than the global start when a CSV already has recent rows. Override the global start with `--start-date` or `NEPSE_SCRAPER_START_DATE`.
 
 ---
 

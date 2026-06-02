@@ -24,6 +24,7 @@ DEFAULT_PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 DEFAULT_START_DATE = datetime(2020, 1, 1)
 DEFAULT_DELAY = 1.0
 WARMUP_DAYS = 60
+START_DATE_ENV_VAR = "NEPSE_SCRAPER_START_DATE"
 # Sharesansar's endpoint returns empty payloads for large 'length' values.
 SHARESANSAR_PAGE_SIZE = 20
 
@@ -128,8 +129,8 @@ def parse_args():
     )
     parser.add_argument(
         "--start-date",
-        default=DEFAULT_START_DATE.strftime("%Y-%m-%d"),
-        help="Global minimum fetch date (YYYY-MM-DD).",
+        default=os.getenv(START_DATE_ENV_VAR, DEFAULT_START_DATE.strftime("%Y-%m-%d")),
+        help=f"Global minimum fetch date (YYYY-MM-DD). Defaults to ${{{START_DATE_ENV_VAR}}} or {DEFAULT_START_DATE.strftime('%Y-%m-%d')}.",
     )
     parser.add_argument(
         "--symbols",
@@ -455,7 +456,7 @@ def main():
     try:
         global_start = datetime.strptime(args.start_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError("--start-date must be in YYYY-MM-DD format")
+        raise ValueError(f"--start-date must be in YYYY-MM-DD format (or set {START_DATE_ENV_VAR})")
 
     today = datetime.today()
     symbols = resolve_symbols(args.raw_dir, args.symbols)
