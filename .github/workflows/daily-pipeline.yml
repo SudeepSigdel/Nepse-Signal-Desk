@@ -71,13 +71,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add -f data/raw data/processed outputs
+          git add -f data/raw outputs
           if git diff --cached --quiet; then
             echo "No data changes to commit."
             exit 0
           fi
 
           git commit -m "chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
+          export GIT_LFS_SKIP_SMUDGE=1
           git pull --rebase origin "$BRANCH"
           git push origin "HEAD:$BRANCH"
 
