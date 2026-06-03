@@ -1,3 +1,4 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d83b1d32be1b50f222e283641287df8f252246585439cae2066b06daed1b23bf
-size 260
+Strategy,Trades,Win Rate %,Profit Factor,Mean Ret %,Total Ret %,Sharpe,Max DD %
+ML-validated,16097,43.93,1.173,0.6552,10546.97,0.28,-100.0
+Signal-only,13226,39.2,0.757,-0.8189,-10831.34,-0.484,-100.0
+Always-in,140113,37.7,0.799,-0.6709,-93994.93,-0.386,-100.0
