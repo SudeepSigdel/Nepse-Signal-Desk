@@ -2,6 +2,7 @@
   "name": "nepse-ai-signals-frontend",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "axios": "^1.7.8",
