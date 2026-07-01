@@ -2,7 +2,7 @@
 
 An AI-powered stock signal platform for the Nepal Stock Exchange (NEPSE). Scrapes daily market data, trains XGBoost/Random Forest classifiers using walk-forward validation, and exposes a FastAPI backend + React dashboard with BUY / MODERATE / SELL / WEAK_SELL / HOLD signals, interactive candlestick charts, sector/market views, a live model-trust page with real backtest metrics, and persisted user accounts (watchlist + portfolio).
 
-![Python](https://img.shields.io/badge/python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.135-green) ![React](https://img.shields.io/badge/React-18-61dafb) ![XGBoost](https://img.shields.io/badge/XGBoost-3.2-orange) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791)
+![Python](https://img.shields.io/badge/python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.135-green) ![React](https://img.shields.io/badge/React-18-61dafb) ![XGBoost](https://img.shields.io/badge/XGBoost-3.2-orange) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -241,6 +241,22 @@ Production runs on an Azure VM via `docker-compose.prod.yml` (image pulled from 
 | Frontend | React 18, TypeScript, Vite, `lightweight-charts`, Chart.js |
 | Data | Parquet (pyarrow), pickle |
 | Infra | Docker, GitHub Actions, Azure VM |
+
+---
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code conventions, and what CI checks before a PR can merge. Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Found a security issue? See [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
+## License
+
+[MIT](LICENSE) © 2026 Sudeep Sigdel
+
+## Citation
+
+If you use this project or its methodology in academic work, see [CITATION.cff](CITATION.cff).
 
 ---
 
