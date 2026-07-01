@@ -222,7 +222,7 @@ The scraper uses a global start date plus a per-symbol warmup window. The per-sy
 
 Three GitHub Actions workflows:
 
-- **`daily-pipeline.yml`** — validates the frontend (type-check + build) and the backend (`compileall` + `pytest`) on every push/PR, then on a daily schedule (12:15 UTC) runs the full scrape → train → backtest → report pipeline and commits the refreshed data back to the repo.
+- **`daily-pipeline.yml`** — validates the frontend (type-check + build) and the backend (`compileall` + `pytest`) on every push/PR. The full scrape → train → backtest → report pipeline itself only runs on the daily schedule (12:15 UTC), a manual trigger, or a push to `main` that touches `scrapper/`, `automation/`, `src/`, or `requirements.txt` — not on every commit — and commits the refreshed data back to the repo.
 - **`deploy.yml`** — on push to `main`, runs the backend test suite, then builds and pushes the Docker image to `ghcr.io/sudeepsigdel/fyp`.
 - **`keep-alive.yml`** — weekly commit to prevent GitHub disabling scheduled workflows on an inactive repo.
 
