@@ -105,7 +105,7 @@ def main() -> int:
     if not args.skip_scrape:
         scrape_cmd = [
             python_exe,
-            str(project_root / "scrapper" / "Nepse Scraper.py"),
+            str(project_root / "scrapper" / "nepse_scraper.py"),
             "--source",
             args.source,
             "--delay",

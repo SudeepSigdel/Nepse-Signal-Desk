@@ -48,17 +48,6 @@ SIGNAL_TIERS = {
     }
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MODEL ACCURACY (for transparency to users)
-# ─────────────────────────────────────────────────────────────────────────────
-
-MODEL_STATS = {
-    "overall_accuracy": 0.55,           # ~55% of all signals correct
-    "high_confidence_accuracy": 0.62,   # ~62% when confidence >= 0.65
-    "medium_confidence_accuracy": 0.52, # ~52% when confidence 0.55-0.65
-    "lookback_days": 10,                # Signals predict 10-day returns
-    "total_trades_backtested": 1200,    # Number of historical trades tested
-}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # API SETTINGS

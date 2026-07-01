@@ -3,7 +3,7 @@ Pydantic schemas for API requests and responses.
 Centralized data validation and documentation.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 
 
@@ -31,6 +31,11 @@ class StockData(BaseModel):
     date: str
     close: Optional[float]
     rsi: Optional[float]
+    volume_ratio: Optional[float] = None
+    change_pct: Optional[float] = None
+    turnover: Optional[float] = None
+    sector: Optional[str] = None
+    sub_index: Optional[str] = None
     confidence: float
     buy_confidence: Optional[float] = None
     rf_confidence: Optional[float] = None
@@ -148,11 +153,11 @@ class SummaryResponse(BaseModel):
 
 class PositionCheckRequest(BaseModel):
     """Request to check if a position should exit."""
-    symbol: str
-    entry_date: str  # ISO format: "2025-05-01"
-    entry_price: float
-    current_price: float
-    current_buy_conf: float
+    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9]+$")
+    entry_date: str  # ISO format: "2025-05-01"; parsed with datetime.fromisoformat in the route
+    entry_price: float = Field(gt=0)
+    current_price: float = Field(gt=0)
+    current_buy_conf: float = Field(ge=0, le=1)
 
 
 class ExitStatusResponse(BaseModel):
@@ -165,3 +170,114 @@ class ExitStatusResponse(BaseModel):
     current_return_pct: float
     distance_to_stop_loss_pct: float
     risks: List[str]
+
+
+# ══════════════════════════════════════════════════════════════════
+# MODEL PERFORMANCE / TRUST
+# ══════════════════════════════════════════════════════════════════
+
+class FoldMetric(BaseModel):
+    """Walk-forward validation result for a single fold."""
+    fold: int
+    test_period: str
+    train_rows: int
+    test_rows: int
+    auc: float
+
+
+class CalibrationBucket(BaseModel):
+    """Predicted confidence vs. actual outcome rate, for one confidence range."""
+    label: str            # e.g. "Medium (55-65%)"
+    min_confidence: float
+    max_confidence: float
+    predicted_avg: Optional[float]  # mean Pred_proba in bucket
+    actual_rate: Optional[float]    # realized fraction where the label came true
+    count: int
+
+
+class ModelSection(BaseModel):
+    """Validation results for one signal direction (BUY or SELL) of a model family."""
+    fold_metrics: List[FoldMetric]
+    mean_auc: Optional[float]
+    calibration: List[CalibrationBucket]
+
+
+class ThresholdRow(BaseModel):
+    """Backtested trade performance at a given confidence threshold."""
+    threshold: float
+    trades: int
+    win_rate_pct: float
+    profit_factor: float
+    mean_return_pct: float
+    sharpe: float
+
+
+class StrategyRow(BaseModel):
+    """Backtested comparison between the ML-filtered strategy and baselines."""
+    strategy: str  # "ML-validated" | "Signal-only" | "Always-in"
+    trades: int
+    win_rate_pct: float
+    profit_factor: float
+    mean_return_pct: float
+    sharpe: float
+
+
+class ModelPerformanceResponse(BaseModel):
+    """Response for GET /api/model-performance."""
+    family: str
+    buy: ModelSection
+    sell: ModelSection
+    thresholds: List[ThresholdRow]
+    strategy_comparison: List[StrategyRow]
+
+
+# ══════════════════════════════════════════════════════════════════
+# AUTH
+# ══════════════════════════════════════════════════════════════════
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    # bcrypt only uses the first 72 bytes of a password; capping at 72 chars
+    # keeps that limit honest for ASCII passwords rather than silently
+    # ignoring anything past it.
+    password: str = Field(min_length=8, max_length=72)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    has_password: bool  # False for Google-only accounts (no password set)
+
+
+# ══════════════════════════════════════════════════════════════════
+# WATCHLIST & HOLDINGS (per-user, persisted)
+# ══════════════════════════════════════════════════════════════════
+
+class WatchlistItemResponse(BaseModel):
+    symbol: str
+
+
+class HoldingCreate(BaseModel):
+    symbol: str
+    entry_date: str
+    entry_price: float
+    quantity: Optional[float] = None
+
+
+class HoldingResponse(BaseModel):
+    id: int
+    symbol: str
+    entry_date: str
+    entry_price: float
+    quantity: Optional[float]
+    created_at: str

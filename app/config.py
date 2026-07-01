@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     data_processed_dir: Path = Field(default="data/processed")
     model_dir: Path = Field(default="data/processed/models")
     raw_data_dir: Path = Field(default="data/raw")
+    reference_data_dir: Path = Field(default="data/reference")
 
     # ─── API ────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
@@ -35,41 +36,35 @@ class Settings(BaseSettings):
     api_version: str = "0.1.0"
 
     # ─── CORS ────────────────────────────────────────────────
-    cors_origins: List[str] = ["*"]
+    # Kept as a plain string field (not List[str]) because pydantic-settings
+    # tries to JSON-decode env vars for list-typed fields before any validator
+    # runs, which breaks a plain comma-separated value like
+    # "http://a.com,http://b.com". Use the `cors_origins` property below for
+    # the parsed list.
+    cors_origins_csv: str = Field(default="*", validation_alias="CORS_ORIGINS")
 
-    # ─── Rate Limiting ──────────────────────────────────────
-    rate_limit_enabled: bool = True
-    rate_limit_requests_per_minute: int = 100
-
-    # ─── Database ────────────────────────────────────────────
-    database_url: str = ""  # Empty for MVP (no DB required)
+    @property
+    def cors_origins(self) -> List[str]:
+        return [origin.strip() for origin in self.cors_origins_csv.split(",") if origin.strip()]
 
     # ─── Security ────────────────────────────────────────────
     secret_key: str = "dev-key-change-in-production"
     algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
-    # ─── Email (for Beta+) ──────────────────────────────────
-    smtp_server: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
-    sender_email: str = "noreply@nepse-signals.com"
+    # ─── Database ────────────────────────────────────────────
+    database_url: str = ""
 
-    # ─── External Services ──────────────────────────────────
-    sentry_dsn: str = ""  # Optional error tracking
+    # ─── Google OAuth ──────────────────────────────────────────
+    # Empty client_id disables the Google login routes; email/password still works.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
+    frontend_url: str = "http://localhost:3000"
 
     # ─── Scraper ─────────────────────────────────────────────
     scraper_source: str = "sharesansar"
     scraper_delay: float = 0.2
-
-    # ─── Monitoring ──────────────────────────────────────────
-    monitoring_enabled: bool = False
-    metrics_port: int = 9090
-
-    # ─── Feature Flags ──────────────────────────────────────
-    enable_signal_history: bool = False
-    enable_user_alerts: bool = False
-    enable_explainability: bool = False
 
     # ─── ML Model Family ────────────────────────────────────
     # random_forest matches the current checked-in model artifacts.
@@ -87,11 +82,22 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # .env is shared with standalone scripts (e.g. scrapper/nepse_scraper.py
+        # reads NEPSE_SCRAPER_START_DATE via os.getenv directly) that don't
+        # correspond to a Settings field — without this, pydantic-settings
+        # raises on any env var it doesn't recognize.
+        extra="ignore",
     )
 
 
 # ─── Singleton instance (use this in your app) ──────────────
 settings = Settings()
+
+if settings.env == "production" and "*" in settings.cors_origins:
+    raise RuntimeError(
+        "Wildcard CORS origin ('*') is forbidden when ENV=production — "
+        "set CORS_ORIGINS to an explicit comma-separated list of allowed origins."
+    )
 
 # ─── Resolve full paths ────────────────────────────────────
 # Convert relative paths to absolute (relative to project root)
@@ -109,4 +115,9 @@ settings.raw_data_dir = (
     settings.project_root / settings.raw_data_dir
     if not settings.raw_data_dir.is_absolute()
     else settings.raw_data_dir
+)
+settings.reference_data_dir = (
+    settings.project_root / settings.reference_data_dir
+    if not settings.reference_data_dir.is_absolute()
+    else settings.reference_data_dir
 )

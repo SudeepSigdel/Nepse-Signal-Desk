@@ -11,6 +11,11 @@ services:
     build: .
     ports:
       - '8000:8000'
+    # DATABASE_URL, SECRET_KEY, GOOGLE_CLIENT_ID/SECRET etc. come from your
+    # local .env (see .env.example) — without it, accounts/watchlist/holdings
+    # run in degraded mode (auth endpoints return 503/fail).
+    env_file:
+      - .env
     environment:
       ENV: development
       DEBUG: 'true'

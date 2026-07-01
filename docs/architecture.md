@@ -31,41 +31,35 @@ Layer 3 — Position Guidance (UI)
 
 ### Training Method: Walk-Forward Validation
 
-The dataset is split into **7 chronological folds** with an embargo gap between training and test periods to prevent data leakage. Each fold produces one model file.
+The dataset is split into **9 rolling annual folds** (`data/processed/fold_config.json`), each training on an expanding window from 2012-01-01 up to the fold's cutoff, with a 20-day embargo gap before the test period to prevent leakage. Each fold produces one model file.
 
 ```
-Fold 1: train [2010–2018] → test [2019]
-Fold 2: train [2010–2019] → test [2020]
+Fold 1: train [2012-01-01 → 2017-12-31] → test [2018-02-01 → 2018-12-31]
+Fold 2: train [2012-01-01 → 2018-12-31] → test [2019-02-01 → 2019-12-31]
 ...
-Fold 7: train [2010–2024] → test [2025]
+Fold 9: train [2012-01-01 → 2025-12-31] → test [2026-02-01 → 2026-05-02]
 ```
 
-Inference uses the **most recent fold** (fold 6, 0-indexed) — the model with the most training data.
+Live inference uses `model_latest*.pkl` — a copy of the most recent fold's model (the one trained on the most data). `ModelRepository` (`app/repositories/model_repository.py`) picks it automatically; numbered fold files (`model_fold1.pkl` … `model_fold9.pkl`) exist for backtesting/evaluation, not live serving.
 
 ### BUY Classifier (`model_fold*.pkl`)
 
 - **Target:** `Label_10d = 1` if `Fwd_ret_10d > 1%` (clears NEPSE round-trip transaction costs)
-- **Algorithm:** XGBoost by default, or Random Forest when `MODEL_FAMILY=rf`
+- **Algorithm:** XGBoost by default, or Random Forest when `MODEL_FAMILY=random_forest`
 - **Features:** 24 engineered features (see Feature Engineering below)
-- **Saved as:** `data/processed/models/model_fold{0-6}.pkl` for XGBoost, `model_fold{0-6}_rf.pkl` for Random Forest
+- **Saved as:** `data/processed/models/model_fold{1-9}.pkl` (+ `model_latest.pkl`) for XGBoost, `_rf` suffix for Random Forest
 - **Bundle keys:** `model`, `scaler`, `features`
 
 ### SELL Classifier (`model_fold*_sell.pkl`)
 
 - **Target:** `Label_10d_sell = 1` if `Fwd_ret_10d < -1%`
-- **Algorithm:** Same family as BUY (`MODEL_FAMILY=xgboost` or `rf`)
-- **Saved as:** `data/processed/models/model_fold{0-6}_sell.pkl` for XGBoost, `model_fold{0-6}_rf_sell.pkl` for Random Forest
+- **Algorithm:** Same family as BUY (`MODEL_FAMILY=xgboost` or `random_forest`)
+- **Saved as:** `data/processed/models/model_fold{1-9}_sell.pkl` (+ `model_latest_sell.pkl`) for XGBoost, `_rf_sell` suffix for Random Forest
 - **Optional:** If not present, system runs in BUY-only mode (SELL/WEAK_SELL verdicts not generated)
 
 ### Expected Performance
 
-| Model | Metric | Value |
-|---|---|---|
-| BUY | Overall accuracy | ~55% |
-| BUY | High-confidence accuracy (≥0.65) | ~62% |
-| SELL | Overall accuracy | ~51–53% |
-
-Both scores are above the 50% random baseline. Predicting short-term downside is inherently harder than upside for NEPSE.
+Mean out-of-sample AUC across the 9 folds is in the low-to-mid 0.50s for both BUY and SELL (modest edge over the 0.5 no-skill baseline; some folds land at or below 0.5). Numbers move every time the pipeline retrains and are **not** hardcoded — they're computed live from `data/processed/fold_metrics*.csv` and out-of-sample predictions by `app/repositories/evaluation_repository.py`, served via `GET /api/model-performance`, and rendered on the app's **Model Trust** page (including a calibration chart: does a stated confidence level actually track the realized outcome rate?). Check that page for current figures rather than trusting a number written here.
 
 ---
 
@@ -113,7 +107,7 @@ else:                             → HOLD
 
 ## Exit Rules
 
-Defined in [`app/exit_rules.py`](../app/exit_rules.py), called from `POST /api/positions/exit-check`.
+Defined in [`app/services/exit_rules.py`](../app/services/exit_rules.py), called from `POST /api/positions/exit-check` (route in `app/api/routes/positions.py`).
 
 | Rule | Trigger | `exit_type` |
 |---|---|---|
@@ -146,11 +140,14 @@ src/05  →  fold config      (fold_config.json)
 src/06  →  BUY models       (data/processed/models/model_fold*.pkl or model_fold*_rf.pkl)
 src/06b →  SELL models      (data/processed/models/model_fold*_sell.pkl or model_fold*_rf_sell.pkl)
 src/07  →  backtest results (outputs/strategy_metrics*.csv)
-src/08  →  reports + charts (outputs/*.png)
+src/08  →  reports + charts (data/processed/report/*.csv, *.png)
                ↓
-app/data_loader.py  →  loads latest fold model + features into memory
-app/signal_service.py  →  computes buy_confidence, sell_confidence, verdict
-app/routes.py  →  serves via FastAPI
+app/repositories/model_repository.py   →  loads model_latest*.pkl + scaler + features
+app/repositories/stock_repository.py   →  loads all_stocks_features.parquet
+app/repositories/evaluation_repository.py  →  loads fold metrics, OOS calibration, backtest tables
+app/services/signal_service.py         →  computes buy_confidence, sell_confidence, verdict
+app/api/routes/*.py                    →  serves everything via FastAPI (signals, stocks,
+                                           positions, model-performance, auth, watchlist, holdings)
 ```
 
 ---

@@ -6,9 +6,22 @@
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from typing import Any, Dict
 
 from app.config import settings
+
+# Set by RequestIDMiddleware (app/middleware.py) for the duration of a request,
+# so concurrent requests' log lines can be correlated in production.
+request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class RequestIdFilter(logging.Filter):
+    """Attaches the current request's correlation ID to every log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get()
+        return True
 
 
 class JSONFormatter(logging.Formatter):
@@ -26,6 +39,7 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "function": record.funcName,
             "line": record.lineno,
+            "request_id": getattr(record, "request_id", "-"),
         }
 
         if record.exc_info:
@@ -43,6 +57,7 @@ class ReadableFormatter(logging.Formatter):
         return (
             f"[{self.formatTime(record, '%Y-%m-%d %H:%M:%S')}] "
             f"{record.levelname:<8} {record.name:<25} "
+            f"[{getattr(record, 'request_id', '-')}] "
             f"{record.getMessage()}"
         )
 
@@ -67,10 +82,13 @@ def setup_logging() -> None:
     else:
         formatter = ReadableFormatter()
 
+    request_id_filter = RequestIdFilter()
+
     # Console handler (stdout)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(settings.log_level)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(request_id_filter)
     root_logger.addHandler(console_handler)
 
     # Optionally add file handler (in production)
@@ -81,6 +99,7 @@ def setup_logging() -> None:
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(settings.log_level)
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(request_id_filter)
         root_logger.addHandler(file_handler)
 
     # Suppress noisy loggers

@@ -12,6 +12,11 @@ services:
     restart: always
     ports:
       - '8000:8000'
+    # Real secrets (DATABASE_URL, SECRET_KEY, GOOGLE_CLIENT_ID/SECRET,
+    # CORS_ORIGINS, etc.) live in a .env file next to this compose file on
+    # the VM — never committed. See .env.example for the full list.
+    env_file:
+      - .env
     environment:
       ENV: production
       DEBUG: 'false'
