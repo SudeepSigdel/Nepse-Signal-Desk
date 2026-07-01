@@ -95,6 +95,30 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          export GIT_LFS_SKIP_SMUDGE=1
+
+          # This step can start from a base that's hours stale (the pipeline
+          # run above takes a while), and other commits — including other
+          # data refreshes — may have landed on origin since. `git pull
+          # --rebase` would try to reconcile that as a content merge, which
+          # fails outright on binary files (parquet/pkl can't be line-merged)
+          # if two independent full regenerations touched the same file.
+          # There's nothing to "merge" here anyway — a full regeneration
+          # should just replace whatever was there. So: fetch the true
+          # current tip right before committing, and build the new commit
+          # directly on top of it via `reset --soft` (index/ref only, never
+          # touches the working tree) rather than rebasing a diff onto it.
+          git fetch origin "$BRANCH"
+          LAST_SUBJECT=$(git log -1 --pretty=%s "origin/$BRANCH")
+
+          if [[ "$LAST_SUBJECT" == "chore: refresh daily pipeline outputs"* ]]; then
+            # origin's trailing commit is already just a data dump — replace
+            # it outright instead of stacking a new one, so full binary blobs
+            # (no LFS) don't grow history forever.
+            git reset --soft "origin/$BRANCH~1"
+          else
+            git reset --soft "origin/$BRANCH"
+          fi
 
           git add -f data/raw data/processed outputs
           if git diff --cached --quiet; then
@@ -102,21 +126,11 @@ jobs:
             exit 0
           fi
 
-          MSG="chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
-          LAST_SUBJECT=$(git log -1 --pretty=%s)
-          export GIT_LFS_SKIP_SMUDGE=1
+          git commit -m "chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
 
           if [[ "$LAST_SUBJECT" == "chore: refresh daily pipeline outputs"* ]]; then
-            # Trailing commit is already just a data dump — replace it in
-            # place instead of stacking a new one, so full binary blobs
-            # (models, parquet, images; no LFS) don't grow history forever.
-            echo "Amending previous data-refresh commit instead of stacking a new one."
-            git commit --amend -m "$MSG"
             git push --force-with-lease origin "HEAD:$BRANCH"
           else
-            # Previous commit was real work — start a fresh trailing data commit.
-            git commit -m "$MSG"
-            git pull --rebase origin "$BRANCH"
             git push origin "HEAD:$BRANCH"
           fi
 
