@@ -1,9 +1,12 @@
 # ════════════════════════════════════════════════════════════
 # docker-compose.prod.yml — Production Stack (Azure VM)
 # Usage: docker compose -f docker-compose.prod.yml up -d
+#
+# Deploys are pushed by .github/workflows/deploy.yml over SSH after a
+# successful image build — there is no in-VM auto-updater (previously
+# watchtower, removed: its image is unmaintained and couldn't talk to a
+# current Docker Engine API, so it silently stopped auto-deploying).
 # ════════════════════════════════════════════════════════════
-
-version: '3.9'
 
 services:
   backend:
@@ -27,11 +30,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 300 --cleanup

@@ -34,3 +34,11 @@ docs/
 venv/
 node_modules/
 pre-purge.bundle
+
+# evaluation_repository.py reads these two report/output tables to serve
+# GET /api/model-performance (the Trust page) — carve them back out of the
+# blanket excludes above, without pulling in the report PNGs or output logs.
+!data/processed/report/summary_table.csv
+!data/processed/report/summary_table_rf.csv
+!outputs/strategy_metrics.csv
+!outputs/strategy_metrics_rf.csv

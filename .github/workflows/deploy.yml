@@ -62,3 +62,30 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to production VM
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_KEY }}
+          SSH_HOST: ${{ secrets.AZURE_VM_HOST }}
+          SSH_USER: ${{ secrets.AZURE_VM_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Keep the VM's compose file in sync with what's committed, so
+          # config changes (like this one removing watchtower) roll out
+          # automatically instead of silently drifting from the repo.
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yml "$SSH_USER@$SSH_HOST:~/docker-compose.prod.yml"
+
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
+            "cd ~ && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d --remove-orphans backend"
