@@ -102,10 +102,23 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
+          MSG="chore: refresh daily pipeline outputs $(date -u +'%Y-%m-%d %H:%M:%S')"
+          LAST_SUBJECT=$(git log -1 --pretty=%s)
           export GIT_LFS_SKIP_SMUDGE=1
-          git pull --rebase origin "$BRANCH"
-          git push origin "HEAD:$BRANCH"
+
+          if [[ "$LAST_SUBJECT" == "chore: refresh daily pipeline outputs"* ]]; then
+            # Trailing commit is already just a data dump — replace it in
+            # place instead of stacking a new one, so full binary blobs
+            # (models, parquet, images; no LFS) don't grow history forever.
+            echo "Amending previous data-refresh commit instead of stacking a new one."
+            git commit --amend -m "$MSG"
+            git push --force-with-lease origin "HEAD:$BRANCH"
+          else
+            # Previous commit was real work — start a fresh trailing data commit.
+            git commit -m "$MSG"
+            git pull --rebase origin "$BRANCH"
+            git push origin "HEAD:$BRANCH"
+          fi
 
       - name: Upload logs and outputs
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main'))
