@@ -1,0 +1,19 @@
+Daily pipeline started: 2026-07-02T14:53:15.703009
+Python: /opt/hostedtoolcache/Python/3.11.15/x64/bin/python
+Project root: /home/runner/work/fyp/fyp
+
+SUCCESS: Scrape latest NEPSE data at 2026-07-02T15:13:01.566381
+SUCCESS: Run 01_data_audit.py at 2026-07-02T15:13:05.342507
+SUCCESS: Run 02_data_cleaning.py at 2026-07-02T15:13:06.194644
+SUCCESS: Run 03_feature_engineering.py at 2026-07-02T15:13:08.571828
+SUCCESS: Run 03b_fix_infinities.py at 2026-07-02T15:13:10.249488
+SUCCESS: Run 04_label_construction.py at 2026-07-02T15:13:13.311788
+SUCCESS: Run 05_walk_forward_setup.py at 2026-07-02T15:13:15.140693
+SUCCESS: Run 06_train_model.py (XGBoost) at 2026-07-02T15:13:32.373977
+SUCCESS: Run 06b_train_sell_model.py (XGBoost) at 2026-07-02T15:13:49.122226
+SUCCESS: Run 07_backtest.py (XGBoost) at 2026-07-02T15:13:50.903255
+SUCCESS: Run 08_reporting.py (XGBoost) at 2026-07-02T15:13:54.494508
+SUCCESS: Run 06_train_model.py (Random Forest) at 2026-07-02T15:22:08.048472
+SUCCESS: Run 06b_train_sell_model.py (Random Forest) at 2026-07-02T15:30:30.479587
+SUCCESS: Run 07_backtest.py (Random Forest) at 2026-07-02T15:30:32.180085
+SUCCESS: Run 08_reporting.py (Random Forest) at 2026-07-02T15:30:36.236269
