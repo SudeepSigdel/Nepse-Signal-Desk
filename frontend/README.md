@@ -64,6 +64,10 @@ else                         → HOLD
 
 **Position exit check**: `PositionHelper` (stock detail page) and `PortfolioPage` call `POST /api/positions/exit-check` to get live exit guidance for a tracked position.
 
+**Model context**: BUY/SELL signals can be viewed as XGBoost, Random Forest, or a blend. The separate relative-strength score is XGBoost-only and compares a stock with the NEPSE universe; it is not an absolute profit signal. XGBoost plus relative strength refresh daily, while Random Forest refreshes weekly.
+
+**Sentiment**: when news coverage exists, BUY/SELL models include a market-wide FinBERT sentiment feature. It is not symbol-specific news analysis; the UI wording in `TrustPage` and `ModelContextPanel` must preserve that distinction.
+
 ## Troubleshooting
 
 | Problem | Fix |

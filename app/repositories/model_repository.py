@@ -71,6 +71,8 @@ class ModelRepository:
         self.config: Dict[str, Any] = {}
         self._buy_bundles: Dict[str, Optional[Dict[str, Any]]] = {}
         self._sell_bundles: Dict[str, Optional[Dict[str, Any]]] = {}
+        self._relative_bundle: Optional[Dict[str, Any]] = None
+        self._relative_bundle_loaded = False
 
     def load(self) -> None:
         """Load fold config and select the effective model family, falling back if needed."""
@@ -115,7 +117,8 @@ class ModelRepository:
 
     def is_ready(self) -> bool:
         bundle = self.get_buy_bundle(self.model_family)
-        return bool(bundle and bundle.get("model") and bundle.get("scaler") and bundle.get("features"))
+        predictor = bundle and (bundle.get("calibrator") or bundle.get("model"))
+        return bool(predictor and bundle.get("scaler") and bundle.get("features"))
 
     def get_buy_bundle(self, family: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Return {'model', 'scaler', 'features'} for the BUY model of a family (cached)."""
@@ -139,7 +142,12 @@ class ModelRepository:
         bundle = self._load_bundle(model_path)
         if bundle:
             features = bundle.get("feature_cols") or bundle.get("features") or self.config.get("feature_cols")
-            result = {"model": bundle.get("model"), "scaler": bundle.get("scaler"), "features": features}
+            result = {
+                "model": bundle.get("model"),
+                "calibrator": bundle.get("calibrator"),
+                "scaler": bundle.get("scaler"),
+                "features": features,
+            }
             logger.info("Loaded BUY model for family '%s' from %s (%d features)",
                         fam, model_path, len(features) if features else 0)
         else:
@@ -168,11 +176,61 @@ class ModelRepository:
         bundle = self._load_bundle(model_path)
         if bundle:
             features = bundle.get("feature_cols") or bundle.get("features")
-            result = {"model": bundle.get("model"), "scaler": bundle.get("scaler"), "features": features}
+            result = {
+                "model": bundle.get("model"),
+                "calibrator": bundle.get("calibrator"),
+                "scaler": bundle.get("scaler"),
+                "features": features,
+            }
             logger.info("Loaded SELL model for family '%s' from %s", fam, model_path)
         else:
             result = None
         self._sell_bundles[fam] = result
+        return result
+
+    def get_relative_bundle(self) -> Optional[Dict[str, Any]]:
+        """Return {'model', 'calibrator', 'scaler', 'features'} for the
+        Relative Strength model (cached). XGBoost-only, single family -
+        answers "will this stock beat the average NEPSE stock over 10
+        days", NOT a profit signal. See src/06c_train_relative_model.py.
+        """
+        if self._relative_bundle_loaded:
+            return self._relative_bundle
+
+        candidates = glob.glob(str(self.model_dir / "model_fold*_relative.pkl"))
+        latest = self.model_dir / "model_latest_relative.pkl"
+        if latest.exists():
+            candidates.append(str(latest))
+
+        if not candidates:
+            logger.warning("No Relative Strength model files found in %s (optional)", self.model_dir)
+            self._relative_bundle = None
+            self._relative_bundle_loaded = True
+            return None
+
+        def sort_key(path: str) -> int:
+            basename = os.path.basename(path)
+            if basename == "model_latest_relative.pkl":
+                return 10**9
+            match = re.search(r"model_fold(\d+)_relative\.pkl$", basename)
+            return int(match.group(1)) if match else -1
+
+        model_path = max(candidates, key=sort_key)
+        bundle = self._load_bundle(model_path)
+        if bundle:
+            features = bundle.get("feature_cols") or bundle.get("features")
+            result = {
+                "model": bundle.get("model"),
+                "calibrator": bundle.get("calibrator"),
+                "scaler": bundle.get("scaler"),
+                "features": features,
+            }
+            logger.info("Loaded Relative Strength model from %s (%d features)",
+                        model_path, len(features) if features else 0)
+        else:
+            result = None
+        self._relative_bundle = result
+        self._relative_bundle_loaded = True
         return result
 
     @staticmethod

@@ -145,15 +145,20 @@ The repo ships with three workflows:
 ### `daily-pipeline.yml`
 
 Validates the frontend (type-check + build) and backend (`compileall` + `pytest`) on every push/PR. On a schedule (**12:15 UTC** / 6:00 PM Nepal time), manual dispatch, or push to `main`, it also:
-1. Runs `automation/daily_pipeline.py` (scrape + train + backtest + report)
-2. Commits updated data files back to the repo
-3. Uploads pipeline artifacts
+1. Runs `automation/daily_pipeline.py` (scrape + XGBoost BUY/SELL + relative strength + backtest + report)
+2. Commits only the data and latest model bundles required by the Azure API
+3. Uploads small research reports/logs with three-day retention
 
 ### `deploy.yml`
 
 On push to `main`: runs the backend test suite, then (only if it passes) builds and pushes the Docker image to `ghcr.io/sudeepsigdel/fyp:latest`. This is the image the Azure VM deployment pulls.
 
-The pipeline driver performs scraping when needed and includes both BUY and SELL model training before backtesting and reporting.
+Daily scheduled runs use XGBoost plus relative strength. Random Forest runs
+separately every Sunday at 18:00 UTC using the latest prepared data, keeping
+each job within hosted-runner limits. Manual runs can select either family or
+`both`. Every resulting bot commit triggers `deploy.yml`, rebuilding the
+backend image and rolling it out to the Azure VM; Cloudflare builds the
+frontend separately from `frontend/`.
 
 Manual trigger: **Actions → Daily Pipeline → Run workflow**
 

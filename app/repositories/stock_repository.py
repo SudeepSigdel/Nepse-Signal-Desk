@@ -41,16 +41,26 @@ class StockRepository:
     def is_ready(self) -> bool:
         return self.features_df is not None and len(self.all_symbols) > 0
 
-    def get_stock_data(self, symbol: str, days: int = 180) -> Optional[pd.DataFrame]:
+    def get_stock_data(self, symbol: str, days: int = 180, offset: int = 0) -> Optional[pd.DataFrame]:
+        """Return up to `days` rows ending `offset` rows back from the most recent one.
+
+        offset=0 (default) returns the most recent `days` rows, preserving prior
+        callers' behavior. offset > 0 lets callers page further back in history.
+        """
         if self.features_df is None:
             return None
-        stock_df = (
-            self.features_df[self.features_df["Symbol"] == symbol]
-            .sort_values("Date")
-            .tail(days)
-            .copy()
-        )
+        symbol_df = self.features_df[self.features_df["Symbol"] == symbol].sort_values("Date")
+        end = len(symbol_df) - offset
+        start = max(0, end - days)
+        stock_df = symbol_df.iloc[start:end].copy()
         return stock_df if not stock_df.empty else None
+
+    def has_older_data(self, symbol: str, days: int, offset: int) -> bool:
+        """Whether rows exist further back than the window returned by get_stock_data."""
+        if self.features_df is None:
+            return False
+        total = len(self.features_df[self.features_df["Symbol"] == symbol])
+        return (offset + days) < total
 
     def get_latest_row(self, symbol: str, required_columns: Optional[List[str]] = None) -> Optional[pd.Series]:
         """Return the most recent row for a symbol, optionally requiring non-null values in required_columns."""

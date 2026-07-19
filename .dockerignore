@@ -19,6 +19,15 @@
 !data/processed/models/model_latest_sell.pkl
 !data/processed/models/model_latest_rf.pkl
 !data/processed/models/model_latest_rf_sell.pkl
+!data/processed/models/model_latest_relative.pkl
+!data/processed/fold_metrics.csv
+!data/processed/fold_metrics_sell.csv
+!data/processed/fold_metrics_rf.csv
+!data/processed/fold_metrics_rf_sell.csv
+!data/processed/oos_predictions.parquet
+!data/processed/oos_predictions_sell.parquet
+!data/processed/oos_predictions_rf.parquet
+!data/processed/oos_predictions_rf_sell.parquet
 
 # Explicitly keep generated research/training artifacts and non-backend code out.
 data/raw/

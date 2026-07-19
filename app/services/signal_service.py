@@ -35,6 +35,7 @@ class SignalService:
         self.models = model_repository
         self.stocks = stock_repository
         self._confidence_cache: Dict[Tuple[str, str, str], Optional[float]] = {}
+        self._relative_strength_cache: Dict[str, Optional[float]] = {}
         self._cache_data_version: Optional[float] = None
 
     def is_liquid_enough(self, symbol: str) -> bool:
@@ -89,6 +90,35 @@ class SignalService:
         """Compute SELL confidence using a specific family (or the default if family is None)."""
         return self._cached_predict(symbol, family, kind="SELL")
 
+    def compute_relative_strength(self, symbol: str) -> Optional[float]:
+        """P(this stock beats the average NEPSE stock's return over the next
+        10 days) - NOT a profit signal. A stock can score high here while
+        still losing money in a falling market; it answers a relative
+        question, not an absolute one. See src/06c_train_relative_model.py
+        and app/schemas.py for the full caveat served alongside this value.
+        """
+        self._invalidate_caches_if_stale()
+
+        if symbol in self._relative_strength_cache:
+            return self._relative_strength_cache[symbol]
+
+        bundle = self.models.get_relative_bundle()
+        result = self._predict(symbol, bundle, family=None, kind="RELATIVE")
+        self._relative_strength_cache[symbol] = result
+        return result
+
+    def _invalidate_caches_if_stale(self) -> None:
+        """Both _confidence_cache and _relative_strength_cache must be
+        cleared together on a data-version bump - clearing only one (e.g.
+        each cache-user checking the version independently) lets whichever
+        method runs first "claim" the version change and leave the other
+        cache stale for that request."""
+        current_version = self.stocks.data_version()
+        if current_version != self._cache_data_version:
+            self._confidence_cache.clear()
+            self._relative_strength_cache.clear()
+            self._cache_data_version = current_version
+
     def _cached_predict(self, symbol: str, family: Optional[str], kind: str) -> Optional[float]:
         """Memoize per-symbol confidence for the lifetime of the current data version.
 
@@ -96,10 +126,7 @@ class SignalService:
         every symbol on every request even though the feature data (and
         therefore the result) only changes once per daily pipeline run.
         """
-        current_version = self.stocks.data_version()
-        if current_version != self._cache_data_version:
-            self._confidence_cache.clear()
-            self._cache_data_version = current_version
+        self._invalidate_caches_if_stale()
 
         cache_key = (symbol, family or "__default__", kind)
         if cache_key in self._confidence_cache:
@@ -111,7 +138,8 @@ class SignalService:
         return result
 
     def _predict(self, symbol: str, bundle: Optional[Dict], family: Optional[str], kind: str) -> Optional[float]:
-        if not bundle or bundle.get("model") is None or bundle.get("scaler") is None or not bundle.get("features"):
+        predictor = bundle and (bundle.get("calibrator") or bundle.get("model"))
+        if not bundle or predictor is None or bundle.get("scaler") is None or not bundle.get("features"):
             return None
 
         features = bundle["features"]
@@ -121,7 +149,11 @@ class SignalService:
 
         try:
             X = bundle["scaler"].transform(latest_row[features].values.reshape(1, -1))
-            conf = float(bundle["model"].predict_proba(X)[0, 1])
+            # Raw model probabilities are overconfident (confirmed via calibration
+            # curve - a 0.63 raw score only won ~40% of the time). The calibrator
+            # (CalibratedClassifierCV, fit in 06_train_model.py) corrects this;
+            # fall back to the raw model only for older bundles that predate it.
+            conf = float(predictor.predict_proba(X)[0, 1])
             return round(conf, 4)
         except Exception as e:
             logger.error("Error computing %s confidence for %s (family=%s): %s", kind, symbol, family, e)
@@ -256,6 +288,7 @@ class SignalService:
             return None
 
         sell_confidence = self.compute_sell_confidence_for_family(symbol, family) if family else self.compute_sell_confidence(symbol)
+        relative_strength = self.compute_relative_strength(symbol)
 
         buy_bundle = self.models.get_buy_bundle(family)
         latest_row = self.stocks.get_latest_row(symbol, required_columns=buy_bundle["features"] if buy_bundle else None)
@@ -272,6 +305,11 @@ class SignalService:
             "close": safe_val(latest_row.get("Close")),
             "buy_confidence": round(buy_confidence, 3),
             "sell_confidence": round(sell_confidence, 3) if sell_confidence else None,
+            "relative_strength": round(relative_strength, 3) if relative_strength is not None else None,
+            "relative_strength_note": (
+                "P(beats the average NEPSE stock over 10 days) - not a profit signal; "
+                "a stock can score high here while still losing money in a falling market."
+            ),
             "verdict": verdict,
             "verdict_color": color,
             "description": description,

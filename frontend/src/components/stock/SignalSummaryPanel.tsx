@@ -9,10 +9,18 @@ export function SignalSummaryPanel({ signal }: { signal: SignalDetail }) {
 
   return (
     <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <ConfidenceMeter label="Buy confidence" value={signal.buy_confidence} tone="buy" />
         <ConfidenceMeter label="Sell confidence" value={signal.sell_confidence} tone="sell" />
+        <ConfidenceMeter label="Relative strength" value={signal.relative_strength} />
       </div>
+
+      {signal.relative_strength_note && (
+        <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+          Relative strength: {signal.relative_strength_note} This compares the stock with the NEPSE universe and is
+          not a profit signal.
+        </p>
+      )}
 
       <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">{verdictSummary(signal.verdict)}</p>
 

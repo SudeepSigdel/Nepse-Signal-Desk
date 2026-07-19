@@ -16,6 +16,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-date", default="", help="Optional YYYY-MM-DD to pass to the scraper (global start date).")
     parser.add_argument("--delay", type=float, default=0.2, help="Per-symbol delay for scraper.")
     parser.add_argument("--skip-scrape", action="store_true", help="Skip scraping step.")
+    parser.add_argument("--skip-news", action="store_true", help="Skip news scraping + sentiment scoring steps.")
+    parser.add_argument("--skip-relative", action="store_true", help="Skip Relative Strength model training.")
     parser.add_argument("--skip-parquet", action="store_true", help="Pass --skip-parquet to scraper.")
     parser.add_argument(
         "--model-family",
@@ -121,6 +123,12 @@ def main() -> int:
 
         steps.append(("Scrape latest NEPSE data", scrape_cmd, None))
 
+    if not args.skip_news:
+        news_cmd = [python_exe, str(project_root / "scrapper" / "news_scraper.py")]
+        steps.append(("Scrape news headlines", news_cmd, None))
+        sentiment_cmd = [python_exe, str(project_root / "src" / "sentiment_scoring.py")]
+        steps.append(("Score news sentiment", sentiment_cmd, None))
+
     prep_scripts = [
         "01_data_audit.py",
         "02_data_cleaning.py",
@@ -142,6 +150,17 @@ def main() -> int:
             (
                 f"Run {script_name}",
                 [python_exe, str(project_root / "src" / script_name)],
+                None,
+            )
+        )
+
+    # Relative strength is an XGBoost-only auxiliary model, independent of
+    # the selected BUY/SELL family. Train it once after shared data prep.
+    if not args.skip_relative:
+        steps.append(
+            (
+                "Run 06c_train_relative_model.py (Relative Strength)",
+                [python_exe, str(project_root / "src" / "06c_train_relative_model.py")],
                 None,
             )
         )

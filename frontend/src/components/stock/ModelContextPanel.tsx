@@ -7,8 +7,9 @@ export function ModelContextPanel({ signal }: { signal: SignalDetail }) {
       <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
         The model estimates the probability that {signal.symbol} moves more than 1% over the next 10 trading days,
         based on recent price action, momentum (RSI, MACD), volatility (Bollinger bands), and volume. It does not use
-        news, fundamentals, or macroeconomic data. A higher confidence score means this pattern has historically been
-        followed by the predicted move more often — it is not a guarantee.
+        company fundamentals or macroeconomic data. A market-wide news-sentiment feature is included when coverage is
+        available, but it is not specific to {signal.symbol}. A higher confidence score means this pattern has
+        historically been followed by the predicted move more often — it is not a guarantee.
       </p>
     </div>
   )

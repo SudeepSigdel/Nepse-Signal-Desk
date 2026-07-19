@@ -12,12 +12,19 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 PRIMARY_LABEL = "Label_10d"
 
 FEATURE_COLS = [
-    "RSI_dist_50", "RSI_slope_3", "MACD_hist", "MACD_hist_slope_3",
+    # Ret_20d, RSI_slope_3, and BB_pctB were dropped after permutation-importance
+    # analysis showed consistently negative-or-negligible out-of-sample AUC
+    # contribution in BOTH model families (they were fitting noise, not signal).
+    # BB_pctB was additionally redundant with RSI_dist_50 (|corr|=0.86) which is
+    # far stronger. See data/processed/permutation_importance*.csv and
+    # feature_redundancy*.csv for the underlying numbers.
+    "RSI_dist_50", "MACD_hist", "MACD_hist_slope_3",
     "EMA_cross", "Price_vs_SMA20",
-    "BB_pctB", "BB_width", "ATR_ratio", "Vol_10d",
+    "BB_width", "ATR_ratio", "Vol_10d",
     "Volume_ratio", "Volume_spike", "OBV_slope_norm",
-    "Ret_1d", "Ret_3d", "Ret_5d", "Ret_10d", "Ret_20d", "Ret_momentum",
-    "In_uptrend", "RSI_oversold", "RSI_overbought", "HL_range_pct", "Gap_pct"
+    "Ret_1d", "Ret_3d", "Ret_5d", "Ret_10d", "Ret_momentum",
+    "In_uptrend", "RSI_oversold", "RSI_overbought", "HL_range_pct", "Gap_pct",
+    "Sentiment_score", "Sentiment_available",
 ]
 
 EMBARGO_DAYS = 20

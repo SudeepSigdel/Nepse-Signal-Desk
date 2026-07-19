@@ -62,6 +62,7 @@ export interface StockDetail {
   days: number
   candles: CandleData[]
   indicators: IndicatorData
+  has_more: boolean
 }
 
 export interface SignalIndicators {
@@ -90,6 +91,8 @@ export interface SignalDetail {
   close: number | null
   buy_confidence: number
   sell_confidence: number | null
+  relative_strength: number | null
+  relative_strength_note: string | null
   verdict: string
   verdict_color: string
   description: string

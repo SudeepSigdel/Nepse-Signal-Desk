@@ -20,11 +20,12 @@ Backtest → reporting (fold metrics, calibration, threshold sensitivity, strate
 FastAPI serves signals, model performance, accounts, watchlist, portfolio  →  React dashboard
 ```
 
-The system uses two separate classifiers, selected with `MODEL_FAMILY`:
+The system uses two trade classifiers selected with `MODEL_FAMILY`, plus a separate relative-strength classifier:
 - **BUY model** — P(stock goes up >1% in 10 days)
 - **SELL model** — P(stock goes down >1% in 10 days)
+- **Relative-strength model** — P(stock beats the average NEPSE stock over 10 days); this is not a profit signal
 
-Set `MODEL_FAMILY=xgboost` or `MODEL_FAMILY=random_forest` (default) to choose which trained artifacts the API serves.
+Set `MODEL_FAMILY=xgboost` or `MODEL_FAMILY=random_forest` (default) to choose which trained BUY/SELL artifacts the API serves. The relative-strength model is XGBoost-only.
 
 Combined, they produce a 5-level verdict: **BUY → MODERATE → HOLD → WEAK_SELL → SELL**
 
@@ -32,7 +33,8 @@ Combined, they produce a 5-level verdict: **BUY → MODERATE → HOLD → WEAK_S
 
 ## Features
 
-- **Signals**: model-ranked stock table, per-stock BUY/SELL confidence, verdict, active technical signals
+- **Signals**: model-ranked stock table, per-stock BUY/SELL confidence, relative strength, verdict, active technical signals
+- **Market sentiment**: optional market-wide FinBERT headline sentiment is incorporated when coverage exists, with an explicit availability flag; it is not company-specific news analysis
 - **Interactive charts**: candlestick + SMA/Bollinger + volume + RSI + MACD, synced crosshair (TradingView `lightweight-charts`)
 - **Markets**: movers (gainers/losers/turnover/activity) and sector aggregates
 - **Model Trust**: real walk-forward AUC per fold, a calibration chart (does stated confidence match the realized outcome rate?), and ML-validated vs. baseline strategy comparison — computed live from backtest artifacts, not hardcoded
@@ -208,6 +210,7 @@ python 04_label_construction.py
 python 05_walk_forward_setup.py
 python 06_train_model.py        # BUY model
 python 06b_train_sell_model.py  # SELL model
+python 06c_train_relative_model.py # Relative-strength model (XGBoost)
 python 07_backtest.py
 python 08_reporting.py
 ```
@@ -222,7 +225,7 @@ The scraper uses a global start date plus a per-symbol warmup window. The per-sy
 
 Three GitHub Actions workflows:
 
-- **`daily-pipeline.yml`** — validates the frontend (type-check + build) and the backend (`compileall` + `pytest`) on every push/PR. The full scrape → train → backtest → report pipeline itself only runs on the daily schedule (12:15 UTC), a manual trigger, or a push to `main` that touches `scrapper/`, `automation/`, `src/`, or `requirements.txt` — not on every commit — and commits the refreshed data back to the repo.
+- **`daily-pipeline.yml`** — validates the frontend (type-check + build) and backend (`compileall` + `pytest`) on every push/PR. XGBoost BUY/SELL plus relative strength run daily at 12:15 UTC; Random Forest refreshes separately every Sunday at 18:00 UTC. Only Azure runtime artifacts are committed, while research plots/logs use short-retention Actions artifacts.
 - **`deploy.yml`** — on push to `main`, runs the backend test suite, then builds and pushes the Docker image to `ghcr.io/sudeepsigdel/fyp`.
 - **`keep-alive.yml`** — weekly commit to prevent GitHub disabling scheduled workflows on an inactive repo.
 

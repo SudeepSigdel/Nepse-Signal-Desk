@@ -85,6 +85,12 @@ async def lifespan(app: FastAPI):
             if missing:
                 logger.error("Model expects features missing from parquet data: %s", sorted(missing))
 
+        relative_bundle = model_repository.get_relative_bundle()
+        if relative_bundle and relative_bundle.get("features"):
+            missing = set(relative_bundle["features"]) - set(stock_repository.features_df.columns)
+            if missing:
+                logger.error("Relative Strength model expects features missing from parquet data: %s", sorted(missing))
+
     app.state.model_repository = model_repository
     app.state.stock_repository = stock_repository
     app.state.sector_repository = sector_repository

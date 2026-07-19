@@ -82,6 +82,7 @@ class StockDetailResponse(BaseModel):
     days: int
     candles: List[CandleData]
     indicators: IndicatorData
+    has_more: bool
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -117,6 +118,8 @@ class SignalResponse(BaseModel):
     close: Optional[float]
     buy_confidence: float
     sell_confidence: Optional[float]  # None if SELL model not available
+    relative_strength: Optional[float] = None  # None if Relative Strength model not available
+    relative_strength_note: Optional[str] = None
     verdict: str
     verdict_color: str
     description: str

@@ -46,7 +46,7 @@ Live inference uses `model_latest*.pkl` — a copy of the most recent fold's mod
 
 - **Target:** `Label_10d = 1` if `Fwd_ret_10d > 1%` (clears NEPSE round-trip transaction costs)
 - **Algorithm:** XGBoost by default, or Random Forest when `MODEL_FAMILY=random_forest`
-- **Features:** 24 engineered features (see Feature Engineering below)
+- **Features:** 27 engineered technical and market-sentiment features (see Feature Engineering below)
 - **Saved as:** `data/processed/models/model_fold{1-9}.pkl` (+ `model_latest.pkl`) for XGBoost, `_rf` suffix for Random Forest
 - **Bundle keys:** `model`, `scaler`, `features`
 
@@ -57,6 +57,14 @@ Live inference uses `model_latest*.pkl` — a copy of the most recent fold's mod
 - **Saved as:** `data/processed/models/model_fold{1-9}_sell.pkl` (+ `model_latest_sell.pkl`) for XGBoost, `_rf_sell` suffix for Random Forest
 - **Optional:** If not present, system runs in BUY-only mode (SELL/WEAK_SELL verdicts not generated)
 
+### Relative-Strength Classifier (`model_fold*_relative.pkl`)
+
+- **Target:** whether the stock's 10-day return beats the cross-sectional average NEPSE return
+- **Algorithm:** XGBoost only
+- **Features:** the 27 BUY/SELL features plus cross-sectional rank and market-volatility-regime features
+- **Meaning:** comparative outperformance, not an absolute profit prediction
+- **Serving:** always returned separately from the selected XGBoost/Random Forest BUY/SELL family
+
 ### Expected Performance
 
 Mean out-of-sample AUC across the 9 folds is in the low-to-mid 0.50s for both BUY and SELL (modest edge over the 0.5 no-skill baseline; some folds land at or below 0.5). Numbers move every time the pipeline retrains and are **not** hardcoded — they're computed live from `data/processed/fold_metrics*.csv` and out-of-sample predictions by `app/repositories/evaluation_repository.py`, served via `GET /api/model-performance`, and rendered on the app's **Model Trust** page (including a calibration chart: does a stated confidence level actually track the realized outcome rate?). Check that page for current figures rather than trusting a number written here.
@@ -65,19 +73,18 @@ Mean out-of-sample AUC across the 9 folds is in the low-to-mid 0.50s for both BU
 
 ## Feature Engineering
 
-24 features built from raw OHLCV data in `src/03_feature_engineering.py`:
+27 features built in `src/03_feature_engineering.py`. Most come from OHLCV data; two describe optional market-wide news sentiment:
 
 | Category | Features |
 |---|---|
-| **Returns** | `Log_Return`, `Ret_3d`, `Ret_5d`, `Ret_10d`, `Ret_20d`, `Ret_momentum` |
-| **RSI** | `RSI_14`, `RSI_dist_50`, `RSI_momentum` |
-| **MACD** | `MACD`, `MACD_Signal`, `MACD_Hist`, `MACD_cross` |
-| **Bollinger** | `BB_pctB`, `BB_width`, `BB_squeeze` |
-| **Volume** | `Volume_ratio`, `Volume_trend` |
-| **Trend** | `SMA20_dist`, `Price_vs_SMA50`, `in_uptrend` |
-| **Volatility** | `ATR_14`, `Volatility_20d` |
+| **Returns/gaps** | `Ret_1d`, `Ret_3d`, `Ret_5d`, `Ret_10d`, `Ret_20d`, `Ret_momentum`, `Gap_pct` |
+| **RSI** | `RSI_dist_50`, `RSI_slope_3`, `RSI_oversold`, `RSI_overbought` |
+| **MACD/trend** | `MACD_hist`, `MACD_hist_slope_3`, `EMA_cross`, `Price_vs_SMA20`, `In_uptrend` |
+| **Bollinger/volatility** | `BB_pctB`, `BB_width`, `ATR_ratio`, `Vol_10d`, `HL_range_pct` |
+| **Volume** | `Volume_ratio`, `Volume_spike`, `OBV_slope_5`, `OBV_slope_norm` |
+| **Market sentiment** | `Sentiment_score`, `Sentiment_available` |
 
-> `Ret_momentum = (Ret_3d − Ret_10d) / 2` — short-term vs medium-term divergence
+The sentiment score is market-wide, uses FinBERT-scored headlines when available, and falls back to a neutral value with `Sentiment_available = 0`; it must not be interpreted as company-specific news analysis.
 
 ---
 

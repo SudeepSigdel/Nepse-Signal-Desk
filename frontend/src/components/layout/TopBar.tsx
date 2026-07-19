@@ -1,4 +1,5 @@
-import { Moon, Sun } from 'lucide-react'
+import { Moon, MoreVertical, Sun } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStocksContext } from '../../context/StocksContext'
@@ -11,6 +12,17 @@ export function TopBar() {
   const { family, setFamily, lastUpdated } = useStocksContext()
   const { isDark, toggleTheme } = useTheme()
   const { user, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [menuOpen])
 
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
@@ -69,6 +81,65 @@ export function TopBar() {
         >
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
+
+        <div className="relative shrink-0 sm:hidden" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label="More options"
+            aria-expanded={menuOpen}
+            className="rounded-md border border-zinc-200 p-1.5 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-md border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Model
+              </p>
+              <div className="mb-2 flex flex-col gap-0.5">
+                {MODEL_FAMILIES.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setFamily(opt.value)
+                      setMenuOpen(false)
+                    }}
+                    className={`rounded px-2 py-1.5 text-left text-sm font-medium transition-colors ${
+                      family === opt.value
+                        ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
+                        : 'text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t border-zinc-200 pt-2 dark:border-zinc-800">
+                {user ? (
+                  <button
+                    onClick={() => {
+                      logout()
+                      setMenuOpen(false)
+                    }}
+                    className="w-full rounded px-2 py-1.5 text-left text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+                  >
+                    Log out
+                  </button>
+                ) : (
+                  <Link
+                    to="/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="block rounded px-2 py-1.5 text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+                  >
+                    Log in
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )

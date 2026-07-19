@@ -34,11 +34,34 @@ python automation/daily_pipeline.py --start-date 2020-01-01
 python automation/daily_pipeline.py --skip-scrape
 ```
 
-### Individual pipeline steps
-
-Run scripts from the `src/` directory in order:
+### Skip news scraping + sentiment scoring
 
 ```bash
+python automation/daily_pipeline.py --skip-news
+```
+
+### Dedicated Random Forest refresh
+
+```bash
+python automation/daily_pipeline.py --skip-scrape --skip-news --skip-relative --model-family random_forest
+```
+
+### Individual pipeline steps
+
+Install the extra pipeline-only dependencies once (torch/transformers, needed
+by `sentiment_scoring.py` — not part of the production API's `requirements.txt`,
+see that file's header comment for why):
+
+```bash
+pip install -r requirements.txt -r requirements-pipeline.txt
+```
+
+Run scripts in order:
+
+```bash
+python scrapper/news_scraper.py       # from repo root
+python src/sentiment_scoring.py       # from repo root
+
 cd src
 python 01_data_audit.py
 python 02_data_cleaning.py
@@ -48,13 +71,14 @@ python 04_label_construction.py
 python 05_walk_forward_setup.py
 python 06_train_model.py          # BUY classifier (9 rolling annual folds)
 python 06b_train_sell_model.py    # SELL classifier (9 rolling annual folds)
+python 06c_train_relative_model.py # Relative-strength classifier (XGBoost)
 python 07_backtest.py
 python 08_reporting.py
 ```
 
 Set `MODEL_FAMILY=random_forest` before these commands if you want the pipeline to train and evaluate Random Forest instead of XGBoost.
 
-Training (`06` and `06b`) is the slow step — expect 10–30 minutes depending on dataset size.
+Training (`06`, `06b`, and `06c`) is the slow step — expect 10–30 minutes depending on dataset size.
 
 ---
 
@@ -62,16 +86,29 @@ Training (`06` and `06b`) is the slow step — expect 10–30 minutes depending 
 
 | Script | Output |
 |---|---|
+| `scrapper/news_scraper.py` | `data/raw/news_headlines.csv` (grows by ~10-20 headlines/day - no historical backfill exists, see script docstring) |
+| `src/sentiment_scoring.py` | `data/processed/market_sentiment.parquet` (daily market-wide FinBERT sentiment score) |
 | `01_data_audit.py` | Console report of raw data quality |
 | `02_data_cleaning.py` | `data/processed/all_stocks_clean.parquet` |
-| `03_feature_engineering.py` | `data/processed/all_stocks_features.parquet` |
+| `03_feature_engineering.py` | `data/processed/all_stocks_features.parquet` (joins in `Sentiment_score`/`Sentiment_available`) |
 | `03b_fix_infinities.py` | In-place infinity/NaN cleanup |
 | `04_label_construction.py` | `data/processed/all_stocks_labeled.parquet` + `outputs/label_distribution.png` |
 | `05_walk_forward_setup.py` | `data/processed/fold_config.json` |
-| `06_train_model.py` | `data/processed/models/model_fold{1-9}.pkl` (+ `model_latest.pkl`) or `_rf` suffix + `fold_metrics*.csv` |
+| `06_train_model.py` | `data/processed/models/model_fold{1-9}.pkl` (+ `model_latest.pkl`) or `_rf` suffix + `fold_metrics*.csv`, `permutation_importance*.csv`, `feature_redundancy*.csv` |
 | `06b_train_sell_model.py` | `data/processed/models/model_fold{1-9}_sell.pkl` (+ `model_latest_sell.pkl`) or `_rf_sell` suffix + metrics |
-| `07_backtest.py` | `outputs/strategy_metrics*.csv` |
-| `08_reporting.py` | `outputs/*.png` charts and summary tables |
+| `06c_train_relative_model.py` | `data/processed/models/model_fold{1-9}_relative.pkl` (+ `model_latest_relative.pkl`) and relative-strength evaluation artifacts |
+| `07_backtest.py` | `outputs/strategy_metrics*.csv`, `outputs/significance_test*.csv`, `outputs/calibration*.csv`, `outputs/brier_score*.txt` |
+| `08_reporting.py` | `outputs/*.png` charts, summary tables, `report/fig5_calibration*.png`, `report/fig6_permutation_importance*.png` |
+
+### Statistical measures (added on top of point-estimate metrics)
+
+- **Bootstrap 95% CIs** on AUC, win rate, Sharpe, and profit factor — every headline metric reads as an interval, not a bare number.
+- **Permutation importance**, aggregated across all folds (`src/stats_utils.py`) — more trustworthy than gain/impurity importance, which is biased toward correlated features and previously only reflected the latest fold's model.
+- **Significance test** (Mann-Whitney U + bootstrap CI on mean-return difference) comparing the ML-validated strategy against the signal-only baseline — checks whether the "ML filter helps" claim is real or sampling noise.
+- **Calibration check** (Brier score + reliability table) — verifies whether `Pred_proba` actually means what it claims (e.g. does a 0.6 "confidence" trade actually win ~60% of the time).
+- **Feature correlation/redundancy audit** — flags feature pairs with `|corr| >= 0.85` that muddy importance rankings.
+
+All of this lives in `src/stats_utils.py` and is wired into `06_train_model.py`, `07_backtest.py`, and `08_reporting.py`.
 
 ---
 
@@ -87,7 +124,10 @@ Three workflows handle CI automation:
 4. Commits updated data files back to the repo
 5. Uploads pipeline outputs as GitHub artifacts
 
-This keeps the scheduled run aligned with the codebase, including the BUY and SELL model branches.
+The daily scheduled run trains XGBoost BUY/SELL and relative strength. A
+separate Sunday schedule refreshes Random Forest using the latest prepared
+data. Keeping the families in separate jobs keeps each run within hosted-runner
+time and storage limits.
 
 **Manual trigger:** Actions → Daily Pipeline → Run workflow
 

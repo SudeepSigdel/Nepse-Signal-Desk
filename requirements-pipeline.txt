@@ -1,0 +1,21 @@
+# Extra dependencies for the offline ML/sentiment pipeline (scrapper/ + src/).
+#
+# NOT part of the production API's Docker image (see Dockerfile, which only
+# installs requirements.txt) - the FastAPI service only serves predictions
+# from pre-computed parquet/pkl files committed by the daily pipeline and
+# never runs FinBERT inference at request time. Installing torch/transformers
+# into the API image would triple its size for a dependency it never uses.
+#
+# Install alongside the base requirements when running the pipeline locally
+# or in CI:
+#   pip install -r requirements.txt -r requirements-pipeline.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.12.1
+transformers==5.13.0
+huggingface_hub==1.22.0
+tokenizers==0.22.2
+safetensors==0.8.0
+regex==2026.6.28
+tqdm==4.68.3
+hf-xet==1.5.1

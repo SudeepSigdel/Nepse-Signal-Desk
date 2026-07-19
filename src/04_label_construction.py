@@ -61,6 +61,38 @@ df["Label_10d_sell"] = np.where(
 print(" Binary labels created (BUY + SELL)")
 
 
+# RELATIVE STRENGTH LABEL: powers a separate signal (src/06c_train_relative_model.py),
+# not the existing BUY/SELL signals above. Absolute-return labels are noisy
+# because most of a stock's 10-day return is just "did the whole market move"
+# - largely unpredictable from technical features. Subtracting the day's
+# cross-sectional mean forward return isolates the learnable part: did this
+# stock do better than its peers over the same window. See
+# experiments/auc_experiments.py - this alone lifted mean walk-forward AUC
+# from 0.520 to 0.540 and fixed every anti-predictive fold (5/9 -> 2/9 with
+# AUC < 0.5); combined with rank/regime features, 0.550 and 0/9.
+#
+# NOT a profit signal - a stock can "beat the market" while still losing
+# money in a falling market. Served separately as relative_strength, distinct
+# from buy_confidence/sell_confidence (see app/services/signal_service.py).
+mkt_fwd_ret_10d = df.groupby("Date")["Fwd_ret_10d"].transform("mean")
+df["Relative_fwd_ret_10d"] = df["Fwd_ret_10d"] - mkt_fwd_ret_10d
+df["Label_10d_relative"] = np.where(
+    df["Relative_fwd_ret_10d"].notna(),
+    (df["Relative_fwd_ret_10d"] > 0).astype(int),
+    np.nan,
+)
+# Symmetric underperformance label - not used by any training script yet,
+# but cheap to keep alongside its BUY-side counterpart for a future
+# relative-SELL/"Relative Weakness" signal.
+df["Label_10d_relative_sell"] = np.where(
+    df["Relative_fwd_ret_10d"].notna(),
+    (df["Relative_fwd_ret_10d"] < 0).astype(int),
+    np.nan,
+)
+
+print(" Relative strength labels created")
+
+
 
 print("\n" + "="*55)
 print("LABEL DISTRIBUTION")

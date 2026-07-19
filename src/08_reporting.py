@@ -10,6 +10,8 @@ import pandas as pd
 from matplotlib.patches import Patch
 from sklearn.metrics import auc, roc_curve
 
+from stats_utils import bootstrap_auc_ci, calibration_report
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -98,6 +100,9 @@ with open(latest_model_path, "rb") as fp:
 
 model = model_bundle["model"]
 scaler = model_bundle["scaler"]
+# The live API serves calibrated confidence (see app/services/signal_service.py) -
+# use the same calibrator here so this preview matches production output.
+predictor = model_bundle.get("calibrator", model)
 
 print(f"All files loaded for {MODEL_NAME}. Latest model fold: {LATEST_FOLD}.")
 
@@ -116,13 +121,17 @@ for fold_num, color in zip(PRED_FOLDS, colors):
     fpr, tpr, _ = roc_curve(fold_data[LABEL_COL], fold_data["Pred_proba"])
     fold_auc = auc(fpr, tpr)
     fold_aucs.append(fold_auc)
+    _, auc_ci_low, auc_ci_high = bootstrap_auc_ci(
+        fold_data[LABEL_COL].values, fold_data["Pred_proba"].values, n_boot=500
+    )
     year_label = fold_period_label(fold_num, FOLD_CONFIGS)
     ax.plot(
         fpr,
         tpr,
         color=color,
         linewidth=1.8,
-        label=f"Fold {fold_num} ({year_label})  AUC={fold_auc:.3f}",
+        label=f"Fold {fold_num} ({year_label})  AUC={fold_auc:.3f} "
+              f"[{auc_ci_low:.3f}, {auc_ci_high:.3f}]",
     )
 
 ax.plot([0, 1], [0, 1], "k--", linewidth=1, label="Random (AUC=0.500)")
@@ -286,6 +295,9 @@ for fold_num in PRED_FOLDS:
 
     fpr, tpr, _ = roc_curve(fd[LABEL_COL], fd["Pred_proba"])
     fold_auc = auc(fpr, tpr)
+    _, fold_auc_low, fold_auc_high = bootstrap_auc_ci(
+        fd[LABEL_COL].values, fd["Pred_proba"].values, n_boot=500
+    )
 
     trades = fd[fd["Pred_proba"] >= PROB_THRESHOLD].copy()
     trades["Net_return"] = trades["Fwd_ret_10d"] - TRANS_COST
@@ -296,6 +308,8 @@ for fold_num in PRED_FOLDS:
             "fold": fold_num,
             "year": fold_period_label(fold_num, FOLD_CONFIGS),
             "auc": fold_auc,
+            "auc_ci_low": fold_auc_low,
+            "auc_ci_high": fold_auc_high,
             "sharpe": annualized_sharpe(net, min_count=11),
         }
     )
@@ -308,7 +322,14 @@ bar_colors_auc = [
     "#c0392b" if value < 0.50 else "#f39c12" if value < 0.54 else "#27ae60"
     for value in fsdf["auc"]
 ]
-ax1.bar(fsdf["year"], fsdf["auc"], color=bar_colors_auc, edgecolor="none")
+auc_err = [
+    fsdf["auc"] - fsdf["auc_ci_low"],
+    fsdf["auc_ci_high"] - fsdf["auc"],
+]
+ax1.bar(
+    fsdf["year"], fsdf["auc"], color=bar_colors_auc, edgecolor="none",
+    yerr=auc_err, capsize=3, ecolor="black",
+)
 ax1.axhline(0.50, color="black", linestyle="--", linewidth=1.2, label="Random (0.50)")
 ax1.axhline(
     fsdf["auc"].mean(),
@@ -343,6 +364,60 @@ plt.tight_layout()
 plt.savefig(REPORT_DIR / f"fig4_fold_performance{MODEL_SUFFIX}.png", dpi=150)
 plt.close()
 print(" Figure 4: Fold performance saved")
+
+
+calib_table, brier_score = calibration_report(
+    preds[LABEL_COL].dropna().values,
+    preds.loc[preds[LABEL_COL].notna(), "Pred_proba"].values,
+    n_bins=10,
+)
+
+fig, ax = plt.subplots(figsize=(6.5, 6.5))
+ax.plot([0, 1], [0, 1], "k--", linewidth=1, label="Perfect calibration")
+ax.plot(
+    calib_table["mean_predicted"], calib_table["mean_actual"],
+    marker="o", color="steelblue", linewidth=1.8, label="Model",
+)
+ax.set_xlabel("Mean predicted probability")
+ax.set_ylabel("Actual success rate")
+ax.set_title(
+    f"Calibration - {MODEL_NAME}\nBrier score: {brier_score:.4f} "
+    "(0=perfect, 0.25=constant 0.5 guess)"
+)
+ax.set_xlim([0, 1])
+ax.set_ylim([0, 1])
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(REPORT_DIR / f"fig5_calibration{MODEL_SUFFIX}.png", dpi=150)
+plt.close()
+print(" Figure 5: Calibration curve saved")
+
+
+perm_importance_path = PROCESSED_DIR / f"permutation_importance{MODEL_SUFFIX}.csv"
+if perm_importance_path.exists():
+    perm_df = pd.read_csv(perm_importance_path).sort_values(
+        "importance_mean", ascending=True
+    )
+    fig, ax = plt.subplots(figsize=(9, 8))
+    ax.barh(
+        perm_df["feature"], perm_df["importance_mean"],
+        xerr=perm_df["importance_std"], color="darkorange", edgecolor="none",
+    )
+    ax.axvline(0, color="black", linewidth=0.8)
+    ax.set_title(
+        f"Permutation Importance - {MODEL_NAME}\n"
+        "Mean AUC drop when shuffled, averaged across all folds"
+    )
+    ax.set_xlabel("Mean AUC drop")
+    ax.grid(True, alpha=0.2, axis="x")
+    plt.tight_layout()
+    plt.savefig(REPORT_DIR / f"fig6_permutation_importance{MODEL_SUFFIX}.png", dpi=150)
+    plt.close()
+    print(" Figure 6: Permutation importance saved (from 06_train_model.py output)")
+else:
+    print(f" Skipped Figure 6: {perm_importance_path.name} not found "
+          "(run 06_train_model.py first)")
 
 
 sig_mask = (
@@ -421,7 +496,7 @@ if latest_clean.empty:
     latest_clean["ML_confidence"] = np.nan
 else:
     x_latest = scaler.transform(latest_clean[FEATURE_COLS].values)
-    latest_clean["ML_confidence"] = model.predict_proba(x_latest)[:, 1]
+    latest_clean["ML_confidence"] = predictor.predict_proba(x_latest)[:, 1]
 
 latest_clean["Active_signals"] = latest_clean.apply(active_signal_text, axis=1)
 
@@ -461,6 +536,8 @@ for low, high, label in [
 
 
 summary_df.to_csv(REPORT_DIR / f"summary_table{MODEL_SUFFIX}.csv", index=False)
+calib_table.to_csv(REPORT_DIR / f"calibration_table{MODEL_SUFFIX}.csv", index=False)
+fsdf.to_csv(REPORT_DIR / f"fold_auc_ci{MODEL_SUFFIX}.csv", index=False)
 latest_clean[
     [
         "Symbol",
@@ -480,6 +557,10 @@ print(f"   fig1_roc_curves{MODEL_SUFFIX}.png")
 print(f"   fig2_threshold_analysis{MODEL_SUFFIX}.png")
 print(f"   fig3_feature_importance{MODEL_SUFFIX}.png")
 print(f"   fig4_fold_performance{MODEL_SUFFIX}.png")
+print(f"   fig5_calibration{MODEL_SUFFIX}.png")
+print(f"   fig6_permutation_importance{MODEL_SUFFIX}.png")
 print(f"   summary_table{MODEL_SUFFIX}.csv")
+print(f"   calibration_table{MODEL_SUFFIX}.csv")
+print(f"   fold_auc_ci{MODEL_SUFFIX}.csv")
 print(f"   latest_signals{MODEL_SUFFIX}.csv")
 print("\n All steps complete. Your project pipeline is fully built.")

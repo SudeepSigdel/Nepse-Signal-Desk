@@ -226,9 +226,22 @@ export function TrustPage() {
 
       <Section title="What data it uses">
         <p>
-          Inputs are derived entirely from historical price and volume: moving averages, RSI, MACD, Bollinger Bands,
-          volume ratios, and short-term trend/volatility features. The model does not use company fundamentals,
-          news sentiment, or macroeconomic indicators — it is a technical, pattern-based signal only.
+          Inputs are primarily derived from historical price and volume: moving averages, RSI, MACD, Bollinger Bands,
+          volume ratios, and short-term trend/volatility features. When news coverage is available, the pipeline also
+          adds a market-wide FinBERT sentiment score and an availability flag. It does not use company fundamentals
+          or macroeconomic indicators, and the sentiment input is not company-specific.
+        </p>
+      </Section>
+
+      <Section title="Relative strength and model refreshes">
+        <p>
+          Relative strength is a separate XGBoost model estimating whether a stock will outperform the average NEPSE
+          stock over the next 10 trading days. It is context, not a prediction that the stock will make a profit, and
+          it remains the same when you switch the BUY/SELL model family.
+        </p>
+        <p>
+          XGBoost BUY/SELL and relative-strength models refresh daily after market close. Random Forest refreshes
+          weekly on Sunday night, so the two model families may be based on different refresh dates.
         </p>
       </Section>
 

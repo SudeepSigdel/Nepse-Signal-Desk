@@ -33,8 +33,8 @@ export async function fetchStocks(family?: string): Promise<StocksListResponse> 
   return data
 }
 
-export async function fetchStockDetail(symbol: string, days: number): Promise<StockDetail> {
-  const { data } = await api.get<StockDetail>(`/api/stocks/${symbol}`, { params: { days } })
+export async function fetchStockDetail(symbol: string, days: number, offset = 0): Promise<StockDetail> {
+  const { data } = await api.get<StockDetail>(`/api/stocks/${symbol}`, { params: { days, offset } })
   return data
 }
 

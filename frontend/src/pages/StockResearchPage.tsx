@@ -12,7 +12,7 @@ import { trendFromDelta } from '../components/ui/TrendIndicator'
 import { useStocksContext } from '../context/StocksContext'
 import { useConfidenceBaseline } from '../hooks/useConfidenceBaseline'
 import { useSignal } from '../hooks/useSignal'
-import { useStockDetail } from '../hooks/useStockDetail'
+import { useStockChartHistory } from '../hooks/useStockChartHistory'
 import { formatRelativeTime } from '../lib/format'
 
 export function StockResearchPage() {
@@ -22,7 +22,15 @@ export function StockResearchPage() {
   const baseline = useConfidenceBaseline(stocks)
   const sector = useMemo(() => stocks.find((s) => s.symbol === upperSymbol)?.sector, [stocks, upperSymbol])
 
-  const { detail, loading: detailLoading, error: detailError, refresh: refreshDetail } = useStockDetail(upperSymbol, 180)
+  const {
+    detail,
+    loading: detailLoading,
+    loadingMore: detailLoadingMore,
+    hasMore: detailHasMore,
+    error: detailError,
+    loadMore: loadMoreDetail,
+    refresh: refreshDetail,
+  } = useStockChartHistory(upperSymbol)
   const { signal, error: signalError, lastUpdated, refresh: refreshSignal } = useSignal(upperSymbol, family)
 
   const trend = useMemo(() => {
@@ -66,7 +74,13 @@ export function StockResearchPage() {
 
       <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
         <p className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">Price &amp; indicators</p>
-        <StockChart detail={detail} />
+        <StockChart
+          key={upperSymbol}
+          detail={detail}
+          loadingMore={detailLoadingMore}
+          hasMore={detailHasMore}
+          onLoadMore={loadMoreDetail}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

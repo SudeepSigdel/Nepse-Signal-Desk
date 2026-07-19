@@ -78,16 +78,22 @@ def get_stocks(
 def get_stock_details(
     symbol: str,
     days: int = 180,
+    offset: int = 0,
     stocks: StockRepository = Depends(get_stock_repository),
 ):
-    """Get detailed stock data with indicators for charting."""
+    """Get detailed stock data with indicators for charting.
+
+    `offset` (rows back from the most recent) lets callers page further into
+    history once the initial window has been consumed, e.g. for chart pan/zoom.
+    """
     symbol = symbol.upper()
     days = max(1, min(days, 2000))
+    offset = max(0, offset)
 
     if symbol not in stocks.all_symbols:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
 
-    stock_df = stocks.get_stock_data(symbol, days)
+    stock_df = stocks.get_stock_data(symbol, days, offset)
     if stock_df is None or stock_df.empty:
         raise HTTPException(status_code=404, detail=f"Data for symbol '{symbol}' not found")
 
@@ -141,4 +147,5 @@ def get_stock_details(
         days=days,
         candles=candles,
         indicators=indicators,
+        has_more=stocks.has_older_data(symbol, days, offset),
     )

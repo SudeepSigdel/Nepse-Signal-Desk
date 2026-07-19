@@ -6,6 +6,8 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 from pathlib import Path
 
+from stats_utils import bootstrap_ci, compare_strategies, calibration_report
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
@@ -76,10 +78,27 @@ always_mask  = pd.Series(True, index=preds.index)
 always_trades = simulate_strategy(preds, always_mask, "Always-in")
 
 
-def calc_metrics(trades, strategy_name):
+def _sharpe_stat(net_rets_array):
+    std = net_rets_array.std()
+    if std > 0:
+        return (net_rets_array.mean() / std) * np.sqrt(252 / HOLD_DAYS)
+    return 0.0
+
+
+def _profit_factor_stat(net_rets_array):
+    gross_profit = net_rets_array[net_rets_array > 0].sum()
+    gross_loss = abs(net_rets_array[net_rets_array < 0].sum())
+    return gross_profit / gross_loss if gross_loss > 0 else np.inf
+
+
+def calc_metrics(trades, strategy_name, with_ci=True):
     """
     Calculate all performance metrics for a set of trades.
     Returns a dict of metrics and prints a summary.
+
+    with_ci=True adds bootstrap 95% confidence intervals so the metrics
+    read as "point estimate ± uncertainty" rather than bare numbers that
+    hide how much they'd wobble on a different sample of trades.
     """
     if len(trades) == 0:
         print(f"{strategy_name}: No trades generated")
@@ -109,7 +128,7 @@ def calc_metrics(trades, strategy_name):
     drawdown      = (cum_ret - rolling_max) / rolling_max
     max_drawdown  = drawdown.min() * 100
 
-    return {
+    metrics = {
         "Strategy":      strategy_name,
         "Trades":        len(net_rets),
         "Win Rate %":    round(win_rate, 2),
@@ -119,6 +138,20 @@ def calc_metrics(trades, strategy_name):
         "Sharpe":        round(sharpe, 3),
         "Max DD %":      round(max_drawdown, 2),
     }
+
+    if with_ci and len(net_rets) >= 10:
+        net_arr = net_rets.values
+        wins_arr = wins.values
+
+        _, wr_low, wr_high = bootstrap_ci(wins_arr, lambda x: x.mean() * 100, n_boot=1000)
+        _, sh_low, sh_high = bootstrap_ci(net_arr, _sharpe_stat, n_boot=1000)
+        _, pf_low, pf_high = bootstrap_ci(net_arr, _profit_factor_stat, n_boot=1000)
+
+        metrics["Win Rate CI"]    = f"[{wr_low:.1f}, {wr_high:.1f}]"
+        metrics["Sharpe CI"]      = f"[{sh_low:.3f}, {sh_high:.3f}]"
+        metrics["Profit Fact CI"] = f"[{pf_low:.3f}, {pf_high:.3f}]"
+
+    return metrics
 
 
 print("\n" + "="*70)
@@ -144,6 +177,43 @@ print("  Mean Ret  : average return per trade after costs")
 print("  Total Ret : sum of all trade returns (not compounded)")
 print("  Sharpe    : risk-adjusted return, annualised (>0.5 acceptable)")
 print("  Max DD    : worst peak-to-trough loss (smaller magnitude = better)")
+print("  *_CI      : 95% bootstrap confidence interval for that metric")
+
+
+print("\n" + "="*70)
+print("SIGNIFICANCE TEST: does the ML filter actually beat Signal-only?")
+print("="*70)
+print("Two-sample Mann-Whitney U test on net returns (unpaired, distribution-")
+print("free) plus a bootstrap CI on the difference in mean return. A bigger")
+print("profit factor alone doesn't prove the ML filter helps — this checks")
+print("whether the gap is unlikely to be sampling noise.")
+
+sig_test = compare_strategies(
+    ml_trades["Net_return"].values, sig_trades["Net_return"].values,
+    label_a="ML-validated", label_b="Signal-only",
+)
+print(f"\n  n(ML-validated)={sig_test['n_a']:,}  n(Signal-only)={sig_test['n_b']:,}")
+print(f"  Mean return diff: {sig_test['mean_diff']*100:.4f}%  "
+      f"(95% CI: [{sig_test['ci_low']*100:.4f}%, {sig_test['ci_high']*100:.4f}%])")
+print(f"  Mann-Whitney U={sig_test['u_statistic']:.1f}  p={sig_test['p_value']:.4g}  "
+      f"{'SIGNIFICANT (p<0.05)' if sig_test['significant'] else 'not significant'}")
+
+
+print("\n" + "="*70)
+print("PROBABILITY CALIBRATION (is 'confidence' actually trustworthy?)")
+print("="*70)
+print("If the model says 60% confidence, does that trade actually win ~60%")
+print("of the time? Brier score: 0=perfect, 0.25=what a constant 0.5 guess")
+print("gets. The reliability table below compares predicted vs actual rate")
+print("per probability bin using the same 10-day success label used to train.")
+
+calib_table, brier = calibration_report(
+    preds["Label_10d"].dropna().values,
+    preds.loc[preds["Label_10d"].notna(), "Pred_proba"].values,
+    n_bins=10,
+)
+print(f"\n  Brier score: {brier:.4f}")
+print(calib_table.to_string(index=False))
 
 
 print("\n" + "="*70)
@@ -217,6 +287,15 @@ plt.show()
 metrics_df.to_csv(os.path.join(OUTPUTS_DIR, f"strategy_metrics{MODEL_SUFFIX}.csv"))
 ml_trades.to_parquet(os.path.join(PROCESSED_DIR, f"ml_trades{MODEL_SUFFIX}.parquet"), index=False)
 
-print(f"\n Saved strategy metrics → strategy_metrics{MODEL_SUFFIX}.csv")
-print(f" Saved ML trades        → ml_trades{MODEL_SUFFIX}.parquet")
+pd.DataFrame([sig_test]).to_csv(
+    os.path.join(OUTPUTS_DIR, f"significance_test{MODEL_SUFFIX}.csv"), index=False
+)
+calib_table.to_csv(os.path.join(OUTPUTS_DIR, f"calibration{MODEL_SUFFIX}.csv"), index=False)
+with open(os.path.join(OUTPUTS_DIR, f"brier_score{MODEL_SUFFIX}.txt"), "w") as fp:
+    fp.write(f"{brier:.6f}\n")
+
+print(f"\n Saved strategy metrics    → strategy_metrics{MODEL_SUFFIX}.csv")
+print(f" Saved ML trades           → ml_trades{MODEL_SUFFIX}.parquet")
+print(f" Saved significance test   → significance_test{MODEL_SUFFIX}.csv")
+print(f" Saved calibration table   → calibration{MODEL_SUFFIX}.csv")
 print(f"\n Backtesting complete! Next: reporting layer.")
