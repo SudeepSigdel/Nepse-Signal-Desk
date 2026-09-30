@@ -3,10 +3,13 @@ NEPSE AI Signals API - Main entry point.
 Routes are imported from the routes module for clean organization.
 """
 
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -33,6 +36,7 @@ from app.repositories.model_repository import ModelRepository
 from app.repositories.sector_repository import SectorRepository
 from app.repositories.stock_repository import StockRepository
 from app.services.exit_rules import ExitRulesService
+from app.cache import ResponseCache
 from app.services.paper_trading_service import PaperTradingService
 from app.services.price_feed import PriceFeed
 from app.services.signal_service import SignalService
@@ -44,6 +48,15 @@ logger = get_logger(__name__)
 logger.info(f"Starting NEPSE AI Signals API v{settings.api_version}")
 logger.info(f"Environment: {settings.env}")
 logger.info(f"Debug: {settings.debug}")
+
+
+def _warm_signals(signal_service: SignalService) -> None:
+    started = time.perf_counter()
+    try:
+        signal_service.warm(families=(None, "xgboost", "random_forest"))
+        logger.info("Signal cache warmed in %.1fs", time.perf_counter() - started)
+    except Exception as e:  # warm-up is an optimisation; requests still compute on demand
+        logger.error("Signal warm-up failed: %s", e)
 
 
 # ─── Lifespan (replaces deprecated on_event) ───────────────
@@ -104,12 +117,21 @@ async def lifespan(app: FastAPI):
         stop_loss_pct=5.0,
         min_buy_conf=0.45,
     )
-    app.state.price_feed = PriceFeed(stock_repository, nepse_api_url=settings.nepse_api_url)
+    app.state.response_cache = ResponseCache(settings.redis_url)
+    logger.info("Response cache backend: %s", app.state.response_cache.backend)
+    app.state.price_feed = PriceFeed(
+        stock_repository, nepse_api_url=settings.nepse_api_url, shared_cache=app.state.response_cache
+    )
     app.state.paper_trading_service = PaperTradingService(app.state.price_feed)
     logger.info("Paper trading quotes: %s", "live + EOD fallback" if settings.nepse_api_url else "EOD only")
 
     if model_repository.is_ready() and stock_repository.is_ready():
         logger.info("✓ All data loaded successfully")
+        # Score every symbol for every model family in the background, so the
+        # first dashboard request doesn't pay for model loading + inference.
+        threading.Thread(
+            target=_warm_signals, args=(app.state.signal_service,), name="signal-warmup", daemon=True
+        ).start()
     else:
         logger.warning("⚠ Some data failed to load (degraded mode)")
 
@@ -135,6 +157,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestIDMiddleware)
+# Chart and list payloads are 30-75 KB of repetitive JSON; gzip cuts them ~5-8x.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 # Required by Authlib's Starlette OAuth client to store transient state/nonce
 # during the Google login redirect round-trip.
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)

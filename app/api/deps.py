@@ -6,7 +6,14 @@ lifespan hook) and stored on app.state; these providers just hand out that
 shared instance per request instead of every route constructing its own.
 """
 
+import glob
+import os
+import time
+
 from fastapi import Request
+
+from app.cache import ResponseCache
+from app.config import settings
 
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.model_repository import ModelRepository
@@ -48,3 +55,25 @@ def get_price_feed(request: Request) -> PriceFeed:
 
 def get_paper_trading_service(request: Request) -> PaperTradingService:
     return request.app.state.paper_trading_service
+
+
+def get_response_cache(request: Request) -> ResponseCache:
+    return request.app.state.response_cache
+
+
+_version_memo: dict = {"at": 0.0, "value": ""}
+
+
+def get_data_version(request: Request) -> str:
+    """
+    Identifies the market data + models currently being served; part of every
+    cache key, so a daily pipeline refresh naturally invalidates old entries.
+    Re-stat'ed at most every few seconds.
+    """
+    now = time.monotonic()
+    if now - _version_memo["at"] > 5.0 or not _version_memo["value"]:
+        parquet = request.app.state.stock_repository.data_version() or 0
+        models = [os.path.getmtime(p) for p in glob.glob(str(settings.model_dir / "model_latest*.pkl"))]
+        _version_memo["value"] = f"{parquet:.0f}-{max(models, default=0):.0f}"
+        _version_memo["at"] = now
+    return _version_memo["value"]

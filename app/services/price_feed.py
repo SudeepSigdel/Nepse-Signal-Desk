@@ -7,6 +7,7 @@ Outside hours - or if that server is unset/unreachable - quotes fall back to the
 latest daily bar from the pipeline's feature parquet, marked source="eod".
 """
 
+import json
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -67,11 +68,15 @@ class PriceFeed:
         nepse_api_url: str = "",
         market_open: Callable[[], bool] = is_market_open,
         http_get: Optional[Callable[[str], list]] = None,
+        shared_cache=None,
     ):
         self.stock_repository = stock_repository
         self.nepse_api_url = nepse_api_url.rstrip("/")
         self.market_open = market_open
         self._http_get = http_get or self._default_http_get
+        # Optional app.cache.ResponseCache: with Redis behind it, all workers share
+        # one /LiveMarket snapshot, so the upstream sees ~1 request per 30 s total.
+        self.shared_cache = shared_cache
         self._lock = threading.Lock()
         self._live: dict[str, Quote] = {}
         self._live_fetched_at = 0.0
@@ -88,12 +93,19 @@ class PriceFeed:
                 return self._live
             # Mark the attempt first so a down server isn't retried on every request.
             self._live_fetched_at = time.monotonic()
-            try:
-                rows = self._http_get(f"{self.nepse_api_url}/LiveMarket")
-            except Exception as exc:
-                logger.warning("Live quotes unavailable (%s); using end-of-day prices", exc)
-                self._live = {}
-                return self._live
+            rows = None
+            shared = self.shared_cache.get("live-market") if self.shared_cache else None
+            if shared is not None:
+                rows = json.loads(shared)
+            else:
+                try:
+                    rows = self._http_get(f"{self.nepse_api_url}/LiveMarket")
+                except Exception as exc:
+                    logger.warning("Live quotes unavailable (%s); using end-of-day prices", exc)
+                    self._live = {}
+                    return self._live
+                if self.shared_cache and isinstance(rows, list):
+                    self.shared_cache.set("live-market", json.dumps(rows).encode(), ttl=LIVE_CACHE_SECONDS)
 
             snapshot = {}
             for row in rows if isinstance(rows, list) else []:

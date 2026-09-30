@@ -172,6 +172,27 @@ docker-compose up
 
 ---
 
+## Performance
+
+Market data changes once a day, so the API does the heavy work once and then serves from cache:
+
+- **Indexed data**: the feature parquet is sorted and indexed by symbol at load, so each lookup slices only that symbol's rows.
+- **Batch inference**: each model scores every symbol in a single `predict_proba` call, and this runs in a background thread at startup.
+- **Response cache** (`app/cache.py`): list, detail, signal and performance responses are cached as ready-to-send JSON bytes. Cache keys include the data and model version, so a pipeline refresh invalidates them. The cache is an in-process LRU backed by **Redis** when `REDIS_URL` is set. With Redis, workers share entries and a restarted API serves from cache immediately. If Redis goes down, the API falls back to in-process memory.
+- **HTTP caching**: responses carry an `ETag`, and the dashboard's 30-second polls get `304 Not Modified` with an empty body. `GZipMiddleware` compresses JSON about 5–7×.
+- **Redis also holds** rate-limit counters (so limits hold across workers) and one shared NEPSE live-quote snapshot.
+- The API runs on uvloop + httptools. Set `WEB_CONCURRENCY` for more workers; each holds about 0.8 GB of data and models.
+
+Measured locally with 100 symbols, before → after:
+
+| Request | Before | After |
+|---|---|---|
+| First `/api/stocks` after startup | 28.6 s | 1.3 s cold (0.05 s from Redis after a restart) |
+| Repeat `/api/stocks` | 1.7 s | ~4 ms (304 when unchanged) |
+| `/api/stocks` payload | 29.5 KB | 4.4 KB gzipped |
+
+---
+
 ## Signal Thresholds
 
 Defined in [`app/constants.py`](app/constants.py) — single source of truth used by the backend and frontend.

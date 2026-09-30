@@ -6,7 +6,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_paper_trading_service, get_price_feed
+from app.api.deps import get_paper_trading_service, get_price_feed, get_response_cache
+from app.cache import ResponseCache, cached_json_response
 from app.db import get_db
 from app.db_models import PaperAccount, PaperOrder, User
 from app.rate_limit import limiter
@@ -182,5 +183,15 @@ def fee_preview(payload: FeePreviewRequest):
 
 
 @router.get("/leaderboard", response_model=List[LeaderboardEntry])
-def leaderboard(db: Session = Depends(get_db), service: PaperTradingService = Depends(get_paper_trading_service)):
-    return [LeaderboardEntry(rank=i, **row) for i, row in enumerate(service.leaderboard(db), 1)]
+def leaderboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    service: PaperTradingService = Depends(get_paper_trading_service),
+    cache: ResponseCache = Depends(get_response_cache),
+):
+    # Marks every account to market, so it's recomputed at most once a minute.
+    def build() -> bytes:
+        rows = [LeaderboardEntry(rank=i, **row).model_dump() for i, row in enumerate(service.leaderboard(db), 1)]
+        return json.dumps(rows, separators=(",", ":")).encode()
+
+    return cached_json_response(request, cache, "paper-leaderboard", build, ttl=60, max_age=30)

@@ -1,8 +1,11 @@
 """Signal (ML confidence) endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
 
-from app.api.deps import get_signal_service, get_stock_repository
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from app.api.deps import get_data_version, get_response_cache, get_signal_service, get_stock_repository
+from app.cache import ResponseCache, cached_json_response
 from app.constants import THRESHOLD_MEDIUM
 from app.repositories.stock_repository import StockRepository
 from app.schemas import SignalResponse, SummaryResponse, SummarySignal
@@ -13,27 +16,37 @@ router = APIRouter()
 
 @router.get("/api/signal/{symbol}/both")
 def get_signal_both(
+    request: Request,
     symbol: str,
     stocks: StockRepository = Depends(get_stock_repository),
     signal_service: SignalService = Depends(get_signal_service),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
 ):
     """Return signal payloads for both model families in one response."""
     symbol = symbol.upper()
     if symbol not in stocks.all_symbols:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
 
-    return {
-        "xgboost": signal_service.get_signal(symbol, "xgboost"),
-        "random_forest": signal_service.get_signal(symbol, "random_forest"),
-    }
+    def build() -> bytes:
+        payload = {
+            "xgboost": signal_service.get_signal(symbol, "xgboost"),
+            "random_forest": signal_service.get_signal(symbol, "random_forest"),
+        }
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+
+    return cached_json_response(request, cache, f"signal-both:{version}:{symbol}", build)
 
 
 @router.get("/api/signal/{symbol}", response_model=SignalResponse)
 def get_signal(
+    request: Request,
     symbol: str,
     family: str | None = None,
     stocks: StockRepository = Depends(get_stock_repository),
     signal_service: SignalService = Depends(get_signal_service),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
 ):
     """Get ML confidence score and signal interpretation for a stock."""
     symbol = symbol.upper()
@@ -41,20 +54,31 @@ def get_signal(
     if symbol not in stocks.all_symbols:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
 
-    signal_data = signal_service.get_signal(symbol, family)
-    if signal_data is None:
-        raise HTTPException(status_code=404, detail=f"Insufficient data for symbol '{symbol}'")
+    def build() -> SignalResponse:
+        signal_data = signal_service.get_signal(symbol, family)
+        if signal_data is None:
+            raise HTTPException(status_code=404, detail=f"Insufficient data for symbol '{symbol}'")
+        return SignalResponse(**signal_data)
 
-    return SignalResponse(**signal_data)
+    return cached_json_response(request, cache, f"signal:{version}:{symbol}:{family or ''}", build)
 
 
 @router.get("/api/summary", response_model=SummaryResponse)
 def get_summary(
+    request: Request,
     family: str | None = None,
     stocks: StockRepository = Depends(get_stock_repository),
     signal_service: SignalService = Depends(get_signal_service),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
 ):
     """Get top 10 high-confidence signals across all stocks."""
+    return cached_json_response(
+        request, cache, f"summary:{version}:{family or ''}", lambda: _build_summary(family, stocks, signal_service)
+    )
+
+
+def _build_summary(family: str | None, stocks: StockRepository, signal_service: SignalService) -> SummaryResponse:
     if not stocks.is_ready():
         raise HTTPException(status_code=503, detail="Data not loaded")
 

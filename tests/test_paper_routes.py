@@ -5,7 +5,8 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_paper_trading_service, get_price_feed
+from app.api.deps import get_paper_trading_service, get_price_feed, get_response_cache
+from app.cache import ResponseCache
 from app.db import get_db
 from app.db_models import User
 from app.main import app
@@ -27,6 +28,8 @@ def client(db_session):
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_paper_trading_service] = lambda: service
     app.dependency_overrides[get_price_feed] = lambda: service.price_feed
+    cache = ResponseCache()
+    app.dependency_overrides[get_response_cache] = lambda: cache
     try:
         yield TestClient(app)
     finally:

@@ -1,8 +1,11 @@
 """Stock listing and detail endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.api.deps import get_sector_repository, get_signal_service, get_stock_repository
+from app.api.deps import (
+    get_data_version, get_response_cache, get_sector_repository, get_signal_service, get_stock_repository,
+)
+from app.cache import ResponseCache, cached_json_response
 from app.repositories.sector_repository import SectorRepository
 from app.repositories.stock_repository import StockRepository
 from app.schemas import (
@@ -15,12 +18,24 @@ router = APIRouter()
 
 @router.get("/api/stocks", response_model=StocksListResponse)
 def get_stocks(
+    request: Request,
     family: str | None = None,
     signal_service: SignalService = Depends(get_signal_service),
     stocks: StockRepository = Depends(get_stock_repository),
     sectors: SectorRepository = Depends(get_sector_repository),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
 ):
     """Get all liquid, model-ready stocks, ranked by BUY confidence."""
+    return cached_json_response(
+        request, cache, f"stocks:{version}:{family or ''}",
+        lambda: _build_stocks(family, signal_service, stocks, sectors),
+    )
+
+
+def _build_stocks(
+    family: str | None, signal_service: SignalService, stocks: StockRepository, sectors: SectorRepository
+) -> StocksListResponse:
     if not stocks.is_ready():
         raise HTTPException(status_code=503, detail="Data not loaded")
 
@@ -76,10 +91,13 @@ def get_stocks(
 
 @router.get("/api/stocks/{symbol}", response_model=StockDetailResponse)
 def get_stock_details(
+    request: Request,
     symbol: str,
     days: int = 180,
     offset: int = 0,
     stocks: StockRepository = Depends(get_stock_repository),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
 ):
     """Get detailed stock data with indicators for charting.
 
@@ -89,7 +107,13 @@ def get_stock_details(
     symbol = symbol.upper()
     days = max(1, min(days, 2000))
     offset = max(0, offset)
+    return cached_json_response(
+        request, cache, f"stock:{version}:{symbol}:{days}:{offset}",
+        lambda: _build_stock_details(symbol, days, offset, stocks),
+    )
 
+
+def _build_stock_details(symbol: str, days: int, offset: int, stocks: StockRepository) -> StockDetailResponse:
     if symbol not in stocks.all_symbols:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
 
