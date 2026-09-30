@@ -49,6 +49,7 @@ def _order_response(order: PaperOrder) -> PaperOrderResponse:
         price_source=order.price_source,
         fees=FeeBreakdownResponse(**json.loads(order.fees_json)) if order.fees_json else None,
         realized_pnl=order.realized_pnl,
+        note=order.note,
     )
 
 

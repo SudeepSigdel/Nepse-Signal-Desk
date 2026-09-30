@@ -24,6 +24,7 @@ from app.api.routes import (
     health_router,
     holdings_router,
     paper_router,
+    agents_router,
     performance_router,
     positions_router,
     signals_router,
@@ -178,5 +179,6 @@ app.include_router(auth_router)
 app.include_router(watchlist_router)
 app.include_router(holdings_router)
 app.include_router(paper_router)
+app.include_router(agents_router)
 
 logger.info("API ready")

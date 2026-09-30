@@ -172,6 +172,7 @@ class PaperTradingService:
         order_type: str,
         qty: int,
         limit_price: Optional[float] = None,
+        note: Optional[str] = None,
     ) -> PaperOrder:
         now = self.clock()
         symbol = symbol.strip().upper()
@@ -181,7 +182,7 @@ class PaperTradingService:
         order = PaperOrder(
             account_id=account.id, symbol=symbol, side=side, order_type=order_type, qty=qty,
             limit_price=limit_price if order_type == "limit" else None, status="pending", reserved_cash=0.0,
-            created_at=now.astimezone(timezone.utc),
+            created_at=now.astimezone(timezone.utc), note=note,
         )
         account.orders.append(order)
 

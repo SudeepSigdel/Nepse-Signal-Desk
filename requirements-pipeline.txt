@@ -19,3 +19,7 @@ safetensors==0.8.0
 regex==2026.6.28
 tqdm==4.68.3
 hf-xet==1.5.1
+
+# Trading-agent research (src/10_train_rl_agent.py)
+gymnasium==1.3.0
+stable-baselines3==2.9.0

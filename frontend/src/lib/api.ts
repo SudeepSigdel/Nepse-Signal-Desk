@@ -2,7 +2,9 @@ import axios from 'axios'
 import { API_BASE_URL } from '../config'
 import { getToken } from './authToken'
 import type {
+  AgentReport,
   AuthUser,
+  LiveAgent,
   FeeBreakdown,
   FeePreviewRequest,
   LeaderboardEntry,
@@ -184,4 +186,16 @@ export function apiErrorMessage(err: unknown, fallback = 'Request failed'): stri
     if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg)
   }
   return err instanceof Error ? err.message : fallback
+}
+
+// ─── Trading agents ────────────────────────────────────────
+
+export async function fetchAgentReport(family = 'xgboost'): Promise<AgentReport> {
+  const { data } = await api.get<AgentReport>('/api/agents/report', { params: { family } })
+  return data
+}
+
+export async function fetchLiveAgents(): Promise<LiveAgent[]> {
+  const { data } = await api.get<LiveAgent[]>('/api/agents/live')
+  return data
 }

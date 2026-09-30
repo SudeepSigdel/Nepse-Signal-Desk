@@ -120,6 +120,7 @@ class PaperOrder(Base):
     price_source: Mapped[str | None] = mapped_column(String, nullable=True)  # live | eod
     fees_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     realized_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(String, nullable=True)  # e.g. a bot's reason for the trade
 
     account: Mapped["PaperAccount"] = relationship(back_populates="orders")
 

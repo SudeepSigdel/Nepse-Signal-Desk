@@ -1,5 +1,6 @@
 """API routes, organized by resource type."""
 
+from app.api.routes.agents import router as agents_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
 from app.api.routes.holdings import router as holdings_router
@@ -20,4 +21,5 @@ __all__ = [
     "watchlist_router",
     "holdings_router",
     "paper_router",
+    "agents_router",
 ]

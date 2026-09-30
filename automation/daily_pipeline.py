@@ -162,6 +162,7 @@ def main() -> int:
         "06b_train_sell_model.py",
         "07_backtest.py",
         "08_reporting.py",
+        "09_agent_backtest.py",
     ]
 
     for script_name in prep_scripts:
@@ -208,6 +209,16 @@ def main() -> int:
                     family_env,
                 )
             )
+
+    # Bots place tomorrow's paper orders using the freshly trained model and the
+    # live settings chosen by 09_agent_backtest.py. No-op without DATABASE_URL.
+    steps.append(
+        (
+            "Run live paper-trading agents",
+            [python_exe, str(project_root / "automation" / "run_agents.py")],
+            None,
+        )
+    )
 
     started_all = time.time()
     exit_code = 0

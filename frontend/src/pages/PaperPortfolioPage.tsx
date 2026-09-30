@@ -74,10 +74,11 @@ function OrderRow({ order, onCancel }: { order: PaperOrder; onCancel: (id: numbe
           )}
         </td>
       </tr>
-      {(open && order.fees) || order.reject_reason ? (
+      {(open && order.fees) || order.reject_reason || order.note ? (
         <tr>
           <td colSpan={8} className="px-2 pb-2">
             {order.reject_reason && <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.reject_reason}</p>}
+            {order.note && <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.note}</p>}
             {open && order.fees && (
               <div className="max-w-xs rounded-md bg-zinc-50 p-2.5 dark:bg-zinc-800/60">
                 <FeeBreakdownCard fees={order.fees} />

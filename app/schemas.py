@@ -362,6 +362,7 @@ class PaperOrderResponse(BaseModel):
     price_source: Optional[str]
     fees: Optional[FeeBreakdownResponse]
     realized_pnl: Optional[float]
+    note: Optional[str] = None
 
 
 class PaperEquityPoint(BaseModel):
@@ -401,3 +402,22 @@ class LeaderboardEntry(BaseModel):
     equity: float
     return_pct: float
     trades: int
+
+
+class LiveAgentOrder(BaseModel):
+    id: int
+    symbol: str
+    side: str
+    qty: int
+    status: str
+    fill_price: Optional[float]
+    realized_pnl: Optional[float]
+    note: Optional[str]
+    created_at: str
+
+
+class LiveAgentResponse(BaseModel):
+    name: str
+    account: PaperAccountResponse
+    settings: Optional[str] = None
+    recent_orders: List[LiveAgentOrder]

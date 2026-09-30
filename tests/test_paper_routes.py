@@ -81,3 +81,31 @@ def test_quote_fee_preview_and_leaderboard(client):
     client.post("/api/paper/accounts", json={"name": "A"})
     board = client.get("/api/paper/leaderboard").json()
     assert board[0]["rank"] == 1 and board[0]["trader"] == "tr***@example.com"
+
+
+def test_agent_endpoints(client, db_session):
+    from datetime import date
+
+    import pandas as pd
+
+    from app.agents.live import build_live_agents, run_live_agents
+    from app.api.deps import get_paper_trading_service
+    from app.main import app as fastapi_app
+
+    service = fastapi_app.dependency_overrides[get_paper_trading_service]()
+    market = pd.DataFrame(
+        {"Close": [500.0], "Volume": [1e5], "liquid": [True], "buy_proba": [0.8], "sell_proba": [0.1]},
+        index=pd.Index(["NABIL"], name="Symbol"),
+    )
+    run_live_agents(db_session, service, build_live_agents({}), date(2026, 9, 29), market, {})
+
+    live = client.get("/api/agents/live").json()
+    assert [a["name"] for a in live] == ["SignalBot"]
+    assert live[0]["account"]["is_agent"] is True
+    assert "Model buy confidence 0.80" in live[0]["recent_orders"][0]["note"]
+
+    report = client.get("/api/agents/report")
+    assert report.status_code in (200, 404)  # 404 until src/09_agent_backtest.py has been run
+    if report.status_code == 200:
+        assert {"agents", "comparisons", "method"} <= set(report.json())
+        assert client.get("/api/agents/report", headers={"If-None-Match": report.headers["etag"]}).status_code == 304
