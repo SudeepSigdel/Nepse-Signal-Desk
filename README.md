@@ -67,7 +67,8 @@ cp .env.example .env
 # At minimum set DATABASE_URL (a free Neon/Supabase Postgres instance) for
 # accounts/watchlist/portfolio to work — everything else has safe defaults.
 
-# 4. Apply database migrations (only needed if DATABASE_URL is set)
+# 4. Apply database migrations (only needed if DATABASE_URL is set;
+#    with docker compose the `migrate` service does this automatically)
 alembic upgrade head
 
 # 5. Start the API

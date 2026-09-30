@@ -6,6 +6,15 @@
 version: '3.9'
 
 services:
+  # One-shot: `alembic upgrade head` against DATABASE_URL (from .env) before
+  # the backend starts. Re-run anytime with: docker compose run --rm migrate
+  migrate:
+    build: .
+    env_file:
+      - .env
+    command: ['alembic', 'upgrade', 'head']
+    restart: 'no'
+
   # Backend API
   backend:
     build: .
@@ -26,7 +35,10 @@ services:
       # if the host has room; Redis keeps the cache shared across workers either way.
       WEB_CONCURRENCY: '1'
     depends_on:
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'python', '-c', "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
       interval: 30s

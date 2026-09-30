@@ -9,6 +9,18 @@
 # ════════════════════════════════════════════════════════════
 
 services:
+  # One-shot: applies pending Alembic migrations to DATABASE_URL (from .env)
+  # with the same image, then exits. The backend only starts once it has
+  # succeeded, so every deploy migrates first; if a migration fails, compose
+  # stops before replacing the running backend.
+  migrate:
+    image: ghcr.io/sudeepsigdel/fyp:latest
+    container_name: nepse_migrate
+    env_file:
+      - .env
+    command: ['alembic', 'upgrade', 'head']
+    restart: 'no'
+
   backend:
     image: ghcr.io/sudeepsigdel/fyp:latest
     container_name: nepse_backend
@@ -29,7 +41,10 @@ services:
       # if the host has room; Redis keeps the cache shared across workers either way.
       WEB_CONCURRENCY: '1'
     depends_on:
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'python', '-c', "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
       interval: 30s

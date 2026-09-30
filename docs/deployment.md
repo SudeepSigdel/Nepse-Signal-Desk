@@ -61,11 +61,17 @@ docker compose -f docker-compose.prod.yml up -d --force-recreate
 
 ### Database migrations
 
-Migrations aren't run automatically as part of the container lifecycle. After schema changes, run once (from a machine with `DATABASE_URL` pointed at the production DB, or via `docker exec` into the running container):
+Migrations run automatically. Both compose files have a one-shot `migrate` service that runs `alembic upgrade head` against `DATABASE_URL`, using the same image and `.env` as the backend. The backend waits for it to finish (`depends_on: condition: service_completed_successfully`):
 
-```bash
-alembic upgrade head
-```
+- **Every deploy migrates first.** `deploy.yml`'s `docker compose up -d backend` starts `migrate` before the backend. Once the schema is current it's a no-op.
+- **A failed migration never takes the site down.** Compose stops before replacing the running backend, and `docker logs nepse_migrate` shows why it failed.
+- **To run migrations by hand** (e.g. to check the database before a deploy):
+
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm migrate
+  ```
+
+`migrate` reads the same `.env` as the backend, so it passes the same startup checks. For example, `ENV=production` still requires an explicit `CORS_ORIGINS`.
 
 ### Known issue: watchtower
 
@@ -181,7 +187,7 @@ Runs every **Monday at 06:00 UTC**. Only creates a commit if the last real commi
 | `SECRET_KEY` | dev placeholder | Signs JWTs and the OAuth session cookie — set a real random value in production (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) |
 | `ALGORITHM` | `HS256` | JWT signing algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` (7 days) | JWT lifetime |
-| `DATABASE_URL` | unset | Postgres connection string for accounts/watchlist/holdings. Run `alembic upgrade head` after setting this (see `alembic/`) before starting the app. |
+| `DATABASE_URL` | unset | Postgres connection string for accounts, watchlist, holdings and paper trading. With docker compose, the `migrate` service applies migrations automatically; without Docker, run `alembic upgrade head` before starting the app. The GitHub Actions secret of the same name enables the pipeline's paper-trade settlement and live bots. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | Google OAuth credentials. Google login routes return 503 until both are set. |
 | `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/auth/google/callback` | The **backend's own** domain + `/api/auth/google/callback` — if frontend and backend are on separate (sub)domains, this is the backend's, not the frontend's. Must also be registered exactly under "Authorized redirect URIs" in the Google Cloud Console. |
 | `FRONTEND_URL` | `http://localhost:3000` | The **frontend's** domain — where the backend redirects the browser after a successful Google login |
