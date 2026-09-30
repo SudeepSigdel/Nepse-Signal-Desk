@@ -143,16 +143,31 @@ Only creates a commit if the last real commit was more than 50 days ago. Prevent
 
 ## Scraper
 
-The scraper (`scrapper/nepse_scraper.py`) fetches daily OHLCV data from:
-1. **Sharesansar** — primary source
-2. **Merolagani** — fallback if Sharesansar is unavailable
+The pipeline first refreshes the symbol universe (`scrapper/universe.py`): every
+ordinary equity listed on NEPSE, taken from the auto-updated `stockmap.json` in
+NepseAPI-Unofficial. Promoter shares, mutual funds/schemes and debentures are excluded.
+It writes `data/reference/nepse_universe.csv` and appends new symbols to
+`symbol_sectors.csv` and `symbol_company_names.csv`. If the fetch fails, the last
+committed universe is used.
+
+The scraper (`scrapper/nepse_scraper.py`) then fetches daily OHLCV data for that universe from:
+1. **Merolagani** is the primary source (`--source merolagani-first`, the default). Its chart
+   endpoint (`handlers/TechnicalChartHandler.ashx`) returns any date range in one request.
+2. **Sharesansar** is the fallback. It needs a token page plus paginated 20-row requests,
+   so it is much slower.
 
 Features:
-- Incremental updates (only fetches missing dates)
+- Concurrent fetches (`--workers`, default 6) with a global request-rate cap (`--max-rps`, default 5)
+- Symbols whose CSV already has the latest NEPSE session (Sun–Thu, after 15:00 NPT) are skipped
+  without any request; use `--force` to fetch anyway
+- Incremental updates re-fetch a 10-day overlap only. Indicators are recomputed over the full CSV
+- New listings get full history from `--history-start` (default 2012-01-01) automatically
+- If fetched closes disagree with stored closes on the overlap (median difference > 1%, e.g. after a
+  bonus/right share adjustment or a source switch), the symbol's full history is refetched and rewritten
+- Symbols that drop out of the universe (delisted/merged) keep their CSV but are no longer fetched
 - Retry logic with exponential backoff
 - Rebuilds the combined parquet file after each run
 - Global start date can be set with `--start-date` or `NEPSE_SCRAPER_START_DATE`
-- Per-symbol logs may start later than the global start because the scraper rewinds each symbol by a warmup window when existing CSVs already have data
 
 ---
 

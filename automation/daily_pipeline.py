@@ -11,10 +11,21 @@ STALE_LOCK_MINUTES = 12 * 60
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run NEPSE scrape + full ML pipeline in sequence.")
-    parser.add_argument("--source", choices=["auto", "sharesansar", "merolagani"], default="sharesansar")
+    parser.add_argument(
+        "--source",
+        choices=["merolagani-first", "auto", "sharesansar", "merolagani"],
+        default="merolagani-first",
+    )
     parser.add_argument("--symbols", default="", help="Optional comma-separated symbols.")
     parser.add_argument("--start-date", default="", help="Optional YYYY-MM-DD to pass to the scraper (global start date).")
-    parser.add_argument("--delay", type=float, default=0.2, help="Per-symbol delay for scraper.")
+    parser.add_argument("--delay", type=float, default=0.0, help="Extra per-symbol delay for scraper.")
+    parser.add_argument("--workers", type=int, default=6, help="Concurrent symbol fetches in the scraper.")
+    parser.add_argument("--max-rps", type=float, default=5.0, help="Scraper request rate cap across workers.")
+    parser.add_argument(
+        "--skip-universe",
+        action="store_true",
+        help="Don't refresh data/reference/nepse_universe.csv before scraping.",
+    )
     parser.add_argument("--skip-scrape", action="store_true", help="Skip scraping step.")
     parser.add_argument("--skip-news", action="store_true", help="Skip news scraping + sentiment scoring steps.")
     parser.add_argument("--skip-relative", action="store_true", help="Skip Relative Strength model training.")
@@ -104,6 +115,10 @@ def main() -> int:
 
     steps: list[tuple[str, list[str], dict[str, str] | None]] = []
 
+    if not args.skip_scrape and not args.skip_universe and not args.symbols.strip():
+        universe_cmd = [python_exe, str(project_root / "scrapper" / "universe.py")]
+        steps.append(("Refresh NEPSE symbol universe", universe_cmd, None))
+
     if not args.skip_scrape:
         scrape_cmd = [
             python_exe,
@@ -112,6 +127,10 @@ def main() -> int:
             args.source,
             "--delay",
             str(args.delay),
+            "--workers",
+            str(args.workers),
+            "--max-rps",
+            str(args.max_rps),
         ]
         # Forward optional start-date to the scraper so automation can control the global window
         if args.start_date:

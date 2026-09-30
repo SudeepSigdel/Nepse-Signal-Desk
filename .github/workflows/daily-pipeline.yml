@@ -161,8 +161,7 @@ jobs:
             EXTRA_ARGS+=(--skip-scrape --skip-news --skip-relative)
           fi
           python automation/daily_pipeline.py \
-            --source sharesansar \
-            --delay 0.2 \
+            --source merolagani-first \
             --model-family "$PIPELINE_MODEL_FAMILY" \
             "${EXTRA_ARGS[@]}"
           echo "Pipeline completed at $(date -u)"

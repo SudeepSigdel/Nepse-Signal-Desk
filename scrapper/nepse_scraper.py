@@ -2,7 +2,10 @@ import argparse
 import logging
 import os
 import re
+import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,12 +22,27 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from universe import DEFAULT_REFERENCE_DIR, load_universe_symbols  # noqa: E402
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_RAW_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
 DEFAULT_PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 DEFAULT_START_DATE = datetime(2020, 1, 1)
-DEFAULT_DELAY = 1.0
-WARMUP_DAYS = 60
+# Earliest date requested for symbols with no CSV yet, and for full refetches.
+HISTORY_START_DATE = datetime(2012, 1, 1)
+DEFAULT_DELAY = 0.0
+DEFAULT_WORKERS = 6
+DEFAULT_MAX_RPS = 5.0
+# Indicators are recomputed over the full merged CSV, so the incremental fetch
+# only needs a short overlap to pick up late corrections and detect price
+# adjustments (bonus/right shares) against what is already stored.
+OVERLAP_DAYS = 10
+# Median |relative close difference| on the overlap above which the stored
+# history is considered inconsistent with the source and is refetched in full.
+ADJUSTMENT_TOLERANCE = 0.01
+NEPSE_CLOSE_HOUR = 15
+NEPSE_TRADING_WEEKDAYS = {6, 0, 1, 2, 3}  # Sun-Thu (Mon=0 ... Sun=6)
 START_DATE_ENV_VAR = "NEPSE_SCRAPER_START_DATE"
 NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 # Sharesansar's endpoint returns empty payloads for large 'length' values.
@@ -96,7 +114,39 @@ def build_session():
     return session
 
 
-SESSION = build_session()
+_thread_local = threading.local()
+
+
+def get_session():
+    """One Merolagani session per worker thread (requests.Session isn't thread-safe)."""
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = build_session()
+        _thread_local.session = session
+    return session
+
+
+class RateLimiter:
+    """Spaces request starts across all worker threads to at most max_rps per second."""
+
+    def __init__(self, max_rps):
+        self.interval = 1.0 / max_rps if max_rps and max_rps > 0 else 0.0
+        self._lock = threading.Lock()
+        self._next_at = 0.0
+
+    def wait(self):
+        if not self.interval:
+            return
+        with self._lock:
+            now = time.monotonic()
+            start_at = max(now, self._next_at)
+            self._next_at = start_at + self.interval
+        delay = start_at - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+
+
+RATE_LIMITER = RateLimiter(DEFAULT_MAX_RPS)
 
 
 def build_sharesansar_session():
@@ -135,16 +185,36 @@ def parse_args():
         help=f"Global minimum fetch date (YYYY-MM-DD). Defaults to ${{{START_DATE_ENV_VAR}}} or {DEFAULT_START_DATE.strftime('%Y-%m-%d')}.",
     )
     parser.add_argument(
+        "--history-start",
+        default=HISTORY_START_DATE.strftime("%Y-%m-%d"),
+        help="Start date for symbols with no CSV yet and for full refetches after a price adjustment.",
+    )
+    parser.add_argument(
         "--symbols",
         default="",
-        help="Comma separated symbols. If empty, infer from raw-dir CSVs then fallback list.",
+        help="Comma separated symbols. If empty, use the NEPSE universe (data/reference/nepse_universe.csv), "
+        "then raw-dir CSVs, then a fallback list.",
     )
-    parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help="Delay in seconds per symbol.")
+    parser.add_argument("--reference-dir", default=DEFAULT_REFERENCE_DIR, help="Directory holding nepse_universe.csv.")
+    parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help="Extra delay in seconds after each symbol.")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help="Symbols fetched concurrently.")
+    parser.add_argument(
+        "--max-rps",
+        type=float,
+        default=DEFAULT_MAX_RPS,
+        help="Upper bound on HTTP requests per second across all workers (0 = unlimited).",
+    )
     parser.add_argument(
         "--source",
-        choices=["auto", "sharesansar", "merolagani"],
-        default="auto",
-        help="Data source. 'auto' tries Sharesansar then falls back to Merolagani.",
+        choices=["merolagani-first", "auto", "sharesansar", "merolagani"],
+        default="merolagani-first",
+        help="Data source. 'merolagani-first' (default) uses Merolagani's single-request chart API and falls "
+        "back to Sharesansar; 'auto' tries Sharesansar first.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Fetch every symbol even if its CSV already has the latest trading day.",
     )
     parser.add_argument(
         "--skip-parquet",
@@ -154,20 +224,27 @@ def parse_args():
     return parser.parse_args()
 
 
-def resolve_symbols(raw_dir, symbol_arg):
+def _csv_symbols(raw_dir):
+    if not os.path.isdir(raw_dir):
+        return set()
+    return {filename[:-4].upper() for filename in os.listdir(raw_dir) if filename.lower().endswith(".csv")}
+
+
+def resolve_symbols(raw_dir, symbol_arg, reference_dir=DEFAULT_REFERENCE_DIR):
     if symbol_arg.strip():
         return sorted({s.strip().upper() for s in symbol_arg.split(",") if s.strip()})
 
-    if os.path.isdir(raw_dir):
-        symbols = sorted(
-            {
-                filename[:-4].upper()
-                for filename in os.listdir(raw_dir)
-                if filename.lower().endswith(".csv")
-            }
-        )
-        if symbols:
-            return symbols
+    universe = load_universe_symbols(reference_dir)
+    if universe:
+        stale = sorted(_csv_symbols(raw_dir) - set(universe))
+        if stale:
+            # Delisted/merged/suspended: history stays on disk for training, but isn't fetched.
+            log.info("Not in current universe (kept, not fetched): %s", ", ".join(stale))
+        return universe
+
+    symbols = sorted(_csv_symbols(raw_dir))
+    if symbols:
+        return symbols
 
     return FALLBACK_SYMBOLS
 
@@ -183,7 +260,8 @@ def fetch_merolagani(symbol, start_dt, end_dt):
     }
 
     try:
-        resp = SESSION.get(url, params=params, timeout=30)
+        RATE_LIMITER.wait()
+        resp = get_session().get(url, params=params, timeout=30)
         resp.raise_for_status()
         if not resp.text.strip():
             return None
@@ -249,6 +327,7 @@ def fetch_sharesansar(symbol, start_dt, end_dt):
     page_url = f"https://www.sharesansar.com/company/{symbol}"
 
     try:
+        RATE_LIMITER.wait()
         page_resp = sharesansar_session.get(page_url, timeout=30)
         page_resp.raise_for_status()
     except Exception as exc:
@@ -281,6 +360,7 @@ def fetch_sharesansar(symbol, start_dt, end_dt):
         }
 
         try:
+            RATE_LIMITER.wait()
             resp = sharesansar_session.post(ajax_url, data=payload, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
@@ -331,17 +411,20 @@ def fetch_sharesansar(symbol, start_dt, end_dt):
 
 
 def fetch_data(symbol, start_dt, end_dt, source):
+    """Return (df, source_used); df is None when no source returned rows."""
     if source == "sharesansar":
-        return fetch_sharesansar(symbol, start_dt, end_dt)
+        return fetch_sharesansar(symbol, start_dt, end_dt), "sharesansar"
 
     if source == "merolagani":
-        return fetch_merolagani(symbol, start_dt, end_dt)
+        return fetch_merolagani(symbol, start_dt, end_dt), "merolagani"
 
-    # auto mode
-    df = fetch_sharesansar(symbol, start_dt, end_dt)
-    if df is not None and not df.empty:
-        return df
-    return fetch_merolagani(symbol, start_dt, end_dt)
+    order = ["sharesansar", "merolagani"] if source == "auto" else ["merolagani", "sharesansar"]
+    fetchers = {"sharesansar": fetch_sharesansar, "merolagani": fetch_merolagani}
+    for name in order:
+        df = fetchers[name](symbol, start_dt, end_dt)
+        if df is not None and not df.empty:
+            return df, name
+    return None, None
 
 
 def nepal_today_end() -> datetime:
@@ -350,11 +433,47 @@ def nepal_today_end() -> datetime:
     return nepal_now.replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=None)
 
 
+def last_expected_trading_day(nepal_now=None):
+    """Most recent Sun-Thu session whose close has passed (public holidays aren't known)."""
+    nepal_now = nepal_now or datetime.now(NEPAL_TZ)
+    day = pd.Timestamp(nepal_now.date())
+    if nepal_now.hour < NEPSE_CLOSE_HOUR:
+        day -= pd.Timedelta(days=1)
+    while day.weekday() not in NEPSE_TRADING_WEEKDAYS:
+        day -= pd.Timedelta(days=1)
+    return day
+
+
+def needs_full_refresh(existing, fetched, tolerance=ADJUSTMENT_TOLERANCE):
+    """
+    True when fetched closes disagree with stored closes on overlapping dates.
+
+    That happens after a bonus/right adjustment (the source rescales history) or
+    when stored history came from a different source. Mixing the two would put
+    a fake jump into returns/labels, so the caller refetches full history.
+    """
+    if existing is None or existing.empty or fetched is None or fetched.empty:
+        return False
+    left = existing[["Date", "Close"]].copy()
+    right = fetched[["Date", "Close"]].copy()
+    left["Date"] = pd.to_datetime(left["Date"], errors="coerce").dt.normalize()
+    right["Date"] = pd.to_datetime(right["Date"], errors="coerce").dt.normalize()
+    overlap = left.merge(right, on="Date", suffixes=("_old", "_new")).dropna()
+    overlap = overlap[overlap["Close_old"] > 0]
+    if overlap.empty:
+        return False
+    rel_diff = ((overlap["Close_new"] - overlap["Close_old"]).abs() / overlap["Close_old"]).median()
+    return bool(rel_diff > tolerance)
+
+
 def compute_indicators(df):
     df = df.sort_values("Date").copy()
     c, h, l, v = df["Close"], df["High"], df["Low"], df["Volume"]
 
     df["Daily_Return"] = c.pct_change()
+    # Merolagani doesn't report % change; the first row of each fetch window has none either.
+    pct = c.pct_change() * 100
+    df["Percent Change"] = df["Percent Change"].fillna(pct) if "Percent Change" in df.columns else pct
     df["Log_Return"] = np.log(c / c.shift(1))
     df["SMA_5"] = c.rolling(5).mean()
     df["SMA_20"] = c.rolling(20).mean()
@@ -398,10 +517,31 @@ def get_last_date(csv_path):
     return None
 
 
-def update_csv(symbol, new_df, raw_dir):
+def load_existing(csv_path):
+    if not os.path.exists(csv_path):
+        return None
+    try:
+        existing = pd.read_csv(csv_path)
+    except Exception:
+        return None
+    existing["Date"] = pd.to_datetime(existing["Date"], errors="coerce")
+    return existing.dropna(subset=["Date"])
+
+
+def update_csv(symbol, new_df, raw_dir, replace=False):
+    """Merge new rows into {symbol}.csv (or overwrite it when replace=True) and recompute indicators."""
     csv_path = os.path.join(raw_dir, f"{symbol}.csv")
 
-    if os.path.exists(csv_path):
+    if replace and os.path.exists(csv_path):
+        before_last = load_existing(csv_path)["Date"].max()
+        combined = (
+            new_df.sort_values("Date")
+            .drop_duplicates(subset=["Date"], keep="last")
+            .reset_index(drop=True)
+        )
+        after_last = combined["Date"].max()
+        added = int((combined["Date"] > before_last).sum()) if pd.notna(before_last) else len(combined)
+    elif os.path.exists(csv_path):
         existing = pd.read_csv(csv_path)
         existing["Date"] = pd.to_datetime(existing["Date"], errors="coerce")
         before_last = existing["Date"].max()
@@ -456,6 +596,49 @@ def rebuild_combined_parquet(raw_dir, processed_dir):
     log.info("Parquet rebuilt -> %s rows at %s", f"{len(combined):,}", out_path)
 
 
+def process_symbol(symbol, global_start, history_start, today, last_trading_day, args):
+    """Fetch and store one symbol. Returns (status, symbol, rows_added, detail)."""
+    csv_path = os.path.join(args.raw_dir, f"{symbol}.csv")
+    existing = load_existing(csv_path)
+    last_date = existing["Date"].max().normalize() if existing is not None and not existing.empty else None
+
+    if last_date is not None and not args.force and last_date >= last_trading_day:
+        return "current", symbol, 0, "already has latest session"
+
+    if last_date is not None:
+        symbol_start = max(global_start, last_date.to_pydatetime() - timedelta(days=OVERLAP_DAYS))
+    else:
+        symbol_start = history_start
+
+    fetched, source_used = fetch_data(symbol, symbol_start, today, args.source)
+    if fetched is None or fetched.empty:
+        return "current", symbol, 0, "no data returned"
+
+    replace = False
+    if last_date is not None and needs_full_refresh(existing, fetched):
+        full_start = min(history_start, existing["Date"].min().to_pydatetime())
+        full, full_source = fetch_data(symbol, full_start, today, args.source)
+        if full is not None and not full.empty and not needs_full_refresh(full, fetched):
+            fetched, source_used, replace = full, full_source, True
+        else:
+            return "failed", symbol, 0, "price mismatch vs stored history; full refetch unavailable"
+
+    try:
+        added, latest = update_csv(symbol, fetched, args.raw_dir, replace=replace)
+    except Exception as exc:
+        return "failed", symbol, 0, f"save failed: {exc}"
+    finally:
+        if args.delay:
+            time.sleep(args.delay)
+
+    detail = f"{source_used}, latest {latest.date() if pd.notna(latest) else 'n/a'}"
+    if replace:
+        return "refreshed", symbol, added, detail + ", full history rewritten (price adjustment)"
+    if added > 0:
+        return "updated", symbol, added, detail
+    return "current", symbol, 0, detail
+
+
 def main():
     args = parse_args()
     os.makedirs(args.raw_dir, exist_ok=True)
@@ -463,62 +646,61 @@ def main():
 
     try:
         global_start = datetime.strptime(args.start_date, "%Y-%m-%d")
+        history_start = datetime.strptime(args.history_start, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(f"--start-date must be in YYYY-MM-DD format (or set {START_DATE_ENV_VAR})")
+        raise ValueError(
+            f"--start-date/--history-start must be in YYYY-MM-DD format (or set {START_DATE_ENV_VAR})"
+        )
+
+    global RATE_LIMITER
+    RATE_LIMITER = RateLimiter(args.max_rps)
 
     today = nepal_today_end()
-    symbols = resolve_symbols(args.raw_dir, args.symbols)
+    last_trading_day = last_expected_trading_day()
+    symbols = resolve_symbols(args.raw_dir, args.symbols, args.reference_dir)
+    started = time.monotonic()
 
     log.info("=" * 64)
-    log.info("NEPSE Scraper (source: %s)", args.source)
+    log.info("NEPSE Scraper (source: %s, workers: %s, max rps: %s)", args.source, args.workers, args.max_rps)
     log.info("Global date window: %s -> %s", global_start.date(), today.date())
+    log.info("Last expected trading day: %s", last_trading_day.date())
     log.info("Stocks: %s", len(symbols))
     log.info("=" * 64)
 
-    results = {"updated": [], "current": [], "failed": []}
+    results = {"updated": [], "refreshed": [], "current": [], "failed": []}
 
-    for idx, symbol in enumerate(symbols, 1):
-        csv_path = os.path.join(args.raw_dir, f"{symbol}.csv")
-        last_date = get_last_date(csv_path)
-
-        if last_date is not None:
-            # Pull a small warmup window so rolling indicators stay stable.
-            symbol_start = max(global_start, last_date.to_pydatetime() - timedelta(days=WARMUP_DAYS))
-        else:
-            symbol_start = global_start
-
-        log.info("[%3s/%s] %s  (%s -> %s)", idx, len(symbols), symbol, symbol_start.date(), today.date())
-        fetched = fetch_data(symbol, symbol_start, today, args.source)
-
-        if fetched is None or fetched.empty:
-            log.info("         No data returned")
-            results["current"].append(symbol)
-            time.sleep(max(0.0, args.delay))
-            continue
-
-        try:
-            added, latest = update_csv(symbol, fetched, args.raw_dir)
-            if added > 0:
-                log.info("         +%s rows (latest: %s)", added, latest.date() if pd.notna(latest) else "n/a")
-                results["updated"].append((symbol, added))
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        futures = {
+            pool.submit(process_symbol, symbol, global_start, history_start, today, last_trading_day, args): symbol
+            for symbol in symbols
+        }
+        for done, future in enumerate(as_completed(futures), 1):
+            symbol = futures[future]
+            try:
+                status, _, added, detail = future.result()
+            except Exception as exc:
+                status, added, detail = "failed", 0, f"unexpected error: {exc}"
+            if status in ("updated", "refreshed"):
+                results[status].append((symbol, added))
+                log.info("[%3s/%s] %-8s +%s rows (%s)", done, len(symbols), symbol, added, detail)
+            elif status == "failed":
+                results["failed"].append(symbol)
+                log.warning("[%3s/%s] %-8s FAILED: %s", done, len(symbols), symbol, detail)
             else:
-                log.info("         Already current")
                 results["current"].append(symbol)
-        except Exception as exc:
-            log.error("         Save failed: %s", exc)
-            results["failed"].append(symbol)
+                log.info("[%3s/%s] %-8s current (%s)", done, len(symbols), symbol, detail)
 
-        time.sleep(max(0.0, args.delay))
-
-    total_new = sum(count for _, count in results["updated"])
+    changed = results["updated"] + results["refreshed"]
+    total_new = sum(count for _, count in changed)
     log.info("\n" + "=" * 64)
-    log.info("SUMMARY")
+    log.info("SUMMARY (%.1fs)", time.monotonic() - started)
     log.info("=" * 64)
-    log.info("Updated : %s stocks (%s new rows)", len(results["updated"]), f"{total_new:,}")
-    log.info("Current : %s stocks", len(results["current"]))
-    log.info("Failed  : %s -> %s", len(results["failed"]), results["failed"])
+    log.info("Updated   : %s stocks (%s new rows)", len(changed), f"{total_new:,}")
+    log.info("Refreshed : %s -> %s", len(results["refreshed"]), [s for s, _ in results["refreshed"]])
+    log.info("Current   : %s stocks", len(results["current"]))
+    log.info("Failed    : %s -> %s", len(results["failed"]), sorted(results["failed"]))
 
-    if not args.skip_parquet and results["updated"]:
+    if not args.skip_parquet and changed:
         log.info("\nRebuilding combined parquet...")
         rebuild_combined_parquet(args.raw_dir, args.processed_dir)
     elif args.skip_parquet:
