@@ -63,3 +63,11 @@ def test_clean_prices_end_to_end_and_idempotent():
     assert report2["rows_in"] == report2["rows_out"] and report2["corporate_action_gaps_adjusted"] == 0
     pd.testing.assert_series_equal(again["Close"], out["Close"])
     assert out[out.Symbol == "BBB"]["Close"].tolist() == pytest.approx([10, 10.5, 10.2])
+
+
+def test_rows_without_date_or_price_are_dropped_not_crashing():
+    df = series("AAA", [("2026-06-01", 100), ("2026-06-02", 101)])
+    df = pd.concat([df, pd.DataFrame([{"Symbol": "AAA", "Date": pd.NaT, "Close": 99.0, "Volume": 1.0},
+                                      {"Symbol": "AAA", "Date": pd.Timestamp("2026-06-03"), "Close": 0.0, "Volume": 1.0}])])
+    out, report = clean_prices(df)
+    assert report["unusable_rows_dropped"] == 2 and len(out) == 2

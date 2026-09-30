@@ -153,8 +153,13 @@ def clean_prices(frame: pd.DataFrame, adjust: bool = True) -> tuple[pd.DataFrame
     """Full cleaning pass; returns the cleaned frame and a report of what changed."""
     rows_in = len(frame)
     df = frame.copy()
-    df["Date"] = pd.to_datetime(df["Date"]).dt.normalize()
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.normalize()
+    # Unparseable dates and non-positive closes can't be placed or priced.
+    valid = df["Date"].notna() & (df["Close"] > 0)
+    unusable = int((~valid).sum())
+    df = df[valid]
     df, report = repair_misdated_rows(df)
+    report["unusable_rows_dropped"] = unusable
     df, report["spikes_dropped"] = drop_price_spikes(df)
     report["corporate_action_gaps_adjusted"] = 0
     if adjust:
