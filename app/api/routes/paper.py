@@ -27,7 +27,6 @@ from app.services.auth_service import get_current_user
 from app.services.paper_trading_service import PaperTradingService, as_utc
 from app.services.price_feed import PriceFeed
 from app.trading.fees import buy_cost, sell_proceeds
-from app.trading.rules import is_market_open
 
 router = APIRouter(prefix="/api/paper", tags=["paper-trading"])
 
@@ -190,7 +189,7 @@ def quote(symbol: str, feed: PriceFeed = Depends(get_price_feed)):
     result = feed.get_quote(symbol)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No price data for {symbol.upper()}")
-    return QuoteResponse(**result.to_dict(), market_open=is_market_open())
+    return QuoteResponse(**result.to_dict(), market_open=feed.is_open())
 
 
 @router.post("/fee-preview", response_model=FeeBreakdownResponse)

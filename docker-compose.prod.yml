@@ -37,6 +37,8 @@ services:
       DEBUG: 'false'
       LOG_LEVEL: INFO
       REDIS_URL: redis://redis:6379/0
+      # Live quotes + holiday-aware market status; overrides NEPSE_API_URL in .env.
+      NEPSE_API_URL: http://nepseapi:8000
       # Each worker holds the dataset + models in memory (~0.8 GB), so raise this only
       # if the host has room; Redis keeps the cache shared across workers either way.
       WEB_CONCURRENCY: '1'
@@ -45,12 +47,25 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
+      # Started with the backend (deploys run `up -d backend`), but not waited on:
+      # the backend works without it.
+      nepseapi:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'python', '-c', "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  # NepseAPI-Unofficial (upstream image): live NEPSE quotes and market status
+  # for paper trading. Internal only - no published ports; the backend reaches
+  # it at http://nepseapi:8000. If it is down or NEPSE blocks it, the backend
+  # falls back to end-of-day prices and the trading calendar.
+  nepseapi:
+    image: surajrimal/nepseapi:latest
+    container_name: nepse_live_api
+    restart: always
 
   # Shared response cache + rate-limit counters (optional: the API falls back to
   # in-process memory if Redis is unreachable). Cache only - no persistence needed.

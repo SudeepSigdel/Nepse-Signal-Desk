@@ -88,4 +88,4 @@ jobs:
           scp -i ~/.ssh/deploy_key docker-compose.prod.yml "$SSH_USER@$SSH_HOST:~/docker-compose.prod.yml"
 
           ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
-            "cd ~ && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d --remove-orphans backend"
+            "cd ~ && docker compose -f docker-compose.prod.yml pull backend nepseapi && docker compose -f docker-compose.prod.yml up -d --remove-orphans backend"

@@ -73,6 +73,21 @@ Migrations run automatically. Both compose files have a one-shot `migrate` servi
 
 `migrate` reads the same `.env` as the backend, so it passes the same startup checks. For example, `ENV=production` still requires an explicit `CORS_ORIGINS`.
 
+### Live quotes (NepseAPI-Unofficial)
+
+Both compose files run the upstream `surajrimal/nepseapi` image as the `nepseapi` service. It is internal only, with no published port, and the backend's `NEPSE_API_URL` points at `http://nepseapi:8000`. `deploy.yml` pulls a fresh `nepseapi` image on every deploy, and `up -d backend` starts it.
+
+- **Live fills:** during market hours, paper orders fill at the live last-traded price from `/LiveMarket`. One snapshot covers every symbol and is cached for 30 s, shared through Redis.
+- **Holidays:** during clock hours the backend also asks `/IsNepseOpen`, cached for 60 s. If the exchange says it's closed (a public holiday), orders wait for the next close instead of filling live.
+- **If it's unreachable:** when the service is down or NEPSE blocks the VM, the backend logs a warning and falls back to end-of-day prices and the trading calendar. Nothing else breaks.
+
+To check it from the VM during market hours:
+
+```bash
+docker exec nepse_backend python -c "import httpx; print(httpx.get('http://nepseapi:8000/IsNepseOpen').text)"
+docker logs --tail 50 nepse_live_api
+```
+
 ### Known issue: watchtower
 
 `docker-compose.prod.yml` also runs `containrrr/watchtower` for auto-updates, but its bundled Docker client can lag behind the host's Docker API version and crash-loop (`client version X is too old`) — check `docker logs watchtower` if the deployed image seems stale despite new pushes. When that happens, redeploy manually with the commands above rather than relying on watchtower.
