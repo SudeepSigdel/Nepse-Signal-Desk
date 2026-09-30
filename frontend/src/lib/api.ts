@@ -5,6 +5,7 @@ import type {
   AgentReport,
   AuthUser,
   LiveAgent,
+  MarketBenchmark,
   FeeBreakdown,
   FeePreviewRequest,
   LeaderboardEntry,
@@ -197,5 +198,10 @@ export async function fetchAgentReport(family = 'xgboost'): Promise<AgentReport>
 
 export async function fetchLiveAgents(): Promise<LiveAgent[]> {
   const { data } = await api.get<LiveAgent[]>('/api/agents/live')
+  return data
+}
+
+export async function fetchMarketBenchmark(accountId: number): Promise<MarketBenchmark> {
+  const { data } = await api.get<MarketBenchmark>(`/api/paper/accounts/${accountId}/benchmark`)
   return data
 }

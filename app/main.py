@@ -123,7 +123,9 @@ async def lifespan(app: FastAPI):
     app.state.price_feed = PriceFeed(
         stock_repository, nepse_api_url=settings.nepse_api_url, shared_cache=app.state.response_cache
     )
-    app.state.paper_trading_service = PaperTradingService(app.state.price_feed)
+    app.state.paper_trading_service = PaperTradingService(
+        app.state.price_feed, is_liquid=app.state.signal_service.is_liquid_enough
+    )
     logger.info("Paper trading quotes: %s", "live + EOD fallback" if settings.nepse_api_url else "EOD only")
 
     if model_repository.is_ready() and stock_repository.is_ready():

@@ -256,14 +256,60 @@ def resolve_symbols(raw_dir, symbol_arg, reference_dir=DEFAULT_REFERENCE_DIR):
     return FALLBACK_SYMBOLS
 
 
+class SourceHealth:
+    """
+    Stops calling a source that fails for every symbol. If a source changes its
+    API, each symbol would otherwise pay a wasted request before the fallback.
+    """
+
+    def __init__(self, name, max_failures_before_success=8):
+        self.name = name
+        self.limit = max_failures_before_success
+        self.failures = 0
+        self.successes = 0
+        self._lock = threading.Lock()
+
+    @property
+    def disabled(self):
+        return self.successes == 0 and self.failures >= self.limit
+
+    def record(self, ok, symbol="", reason=""):
+        with self._lock:
+            if ok:
+                self.successes += 1
+                return
+            self.failures += 1
+            if self.successes == 0 and self.failures <= 3:
+                log.warning("  [%s] %s returned no data: %s", symbol, self.name, reason)
+            if self.successes == 0 and self.failures == self.limit:
+                log.error(
+                    "%s failed for the first %d symbols; skipping it for the rest of this run.",
+                    self.name,
+                    self.limit,
+                )
+
+
+MEROLAGANI_HEALTH = SourceHealth("merolagani")
+
+
+def _unix(dt):
+    """Seconds for a naive datetime read as UTC (independent of the runner's time zone)."""
+    return int(pd.Timestamp(dt).tz_localize(None).timestamp())
+
+
 def fetch_merolagani(symbol, start_dt, end_dt):
+    # The endpoint behind merolagani.com's price chart. The older
+    # type=get_price_history now answers 200 with an empty body.
     url = "https://merolagani.com/handlers/TechnicalChartHandler.ashx"
     params = {
-        "type": "get_price_history",
+        "type": "get_advanced_chart",
         "symbol": symbol,
-        "resolution": "D",
-        "from": int(start_dt.timestamp()),
-        "to": int(end_dt.timestamp()),
+        "resolution": "1D",
+        "rangeStartDate": _unix(start_dt),
+        "rangeEndDate": _unix(end_dt),
+        "from": "",
+        "isAdjust": 1,
+        "currencyCode": "NPR",
     }
 
     try:
@@ -271,14 +317,20 @@ def fetch_merolagani(symbol, start_dt, end_dt):
         resp = get_session().get(url, params=params, timeout=30)
         resp.raise_for_status()
         if not resp.text.strip():
+            MEROLAGANI_HEALTH.record(False, symbol, f"HTTP {resp.status_code}, empty body")
             return None
         data = resp.json()
     except Exception as exc:
-        log.warning("  [%s] merolagani request failed: %s", symbol, exc)
+        MEROLAGANI_HEALTH.record(False, symbol, f"request failed: {exc}")
         return None
 
     if data.get("s") != "ok" or not data.get("t"):
+        # "no_data" is normal for a symbol with nothing in the window, so it
+        # neither proves nor disproves that the endpoint works.
+        if data.get("s") != "no_data":
+            MEROLAGANI_HEALTH.record(False, symbol, f"s={data.get('s')!r}")
         return None
+    MEROLAGANI_HEALTH.record(True)
 
     timestamps = data["t"]
     row_count = len(timestamps)
@@ -293,7 +345,9 @@ def fetch_merolagani(symbol, start_dt, end_dt):
         }
     )
 
-    df["Date"] = (df["Date"] + pd.Timedelta(hours=5, minutes=45)).dt.normalize()
+    # Bars are stamped with Nepal wall-clock time written as if it were UTC
+    # (e.g. 20:45 on the session day), so the UTC calendar date is the session.
+    df["Date"] = df["Date"].dt.normalize()
     df["Turnover"] = df["Close"] * df["Volume"]
     df["Percent Change"] = df["Close"].pct_change() * 100
     df["Symbol"] = symbol
@@ -443,6 +497,8 @@ def fetch_data(symbol, start_dt, end_dt, source):
     order = ["sharesansar", "merolagani"] if source == "auto" else ["merolagani", "sharesansar"]
     fetchers = {"sharesansar": fetch_sharesansar, "merolagani": fetch_merolagani}
     for name in order:
+        if name == "merolagani" and MEROLAGANI_HEALTH.disabled:
+            continue
         df = fetchers[name](symbol, start_dt, end_dt)
         if df is not None and not df.empty:
             return df, name

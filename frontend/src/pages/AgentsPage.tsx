@@ -1,10 +1,12 @@
 import { Bot, FlaskConical } from 'lucide-react'
+import { useEffect } from 'react'
 import { AgentEquityChart, agentColor } from '../components/agents/AgentEquityChart'
 import { PaperDisclaimer } from '../components/paper/PaperDisclaimer'
 import { EmptyState } from '../components/ui/EmptyState'
 import { useTheme } from '../hooks/useTheme'
 import { usePolling } from '../hooks/usePolling'
 import { fetchAgentReport, fetchLiveAgents } from '../lib/api'
+import { markVisitedAgents } from '../lib/onboarding'
 import { formatDate, formatMoney, formatPercent } from '../lib/format'
 import type { AgentComparison, AgentEntry, AgentReport } from '../types'
 
@@ -185,6 +187,9 @@ function LiveBots() {
 
 export function AgentsPage() {
   const { data: report, error } = usePolling(() => fetchAgentReport('xgboost'), [])
+  useEffect(() => {
+    markVisitedAgents()
+  }, [])
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">

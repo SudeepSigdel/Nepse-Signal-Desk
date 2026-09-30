@@ -107,6 +107,17 @@ class StockRepository:
         complete = stock_df.dropna(subset=required_columns)
         return complete.iloc[-1] if not complete.empty else None
 
+    def close_change_since(self, symbol: str, start) -> Optional[Tuple[pd.Timestamp, float, float]]:
+        """(first date on/after start, its close, latest close) for a symbol, or None."""
+        frame = self._symbol_frame(symbol)
+        if frame is None or frame.empty:
+            return None
+        after = frame[(frame["Date"] >= pd.Timestamp(start)) & (frame["Close"] > 0)]
+        if after.empty:
+            return None
+        first, last = after.iloc[0], after.iloc[-1]
+        return first["Date"], float(first["Close"]), float(last["Close"])
+
     def data_version(self) -> Optional[float]:
         """Modification time of the backing parquet file; changes when the daily pipeline refreshes data."""
         try:

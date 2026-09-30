@@ -421,3 +421,12 @@ class LiveAgentResponse(BaseModel):
     account: PaperAccountResponse
     settings: Optional[str] = None
     recent_orders: List[LiveAgentOrder]
+
+
+class MarketBenchmarkResponse(BaseModel):
+    account_id: int
+    opened: str
+    start_date: Optional[str]
+    end_date: Optional[str]
+    market_return_pct: float
+    stocks: int
