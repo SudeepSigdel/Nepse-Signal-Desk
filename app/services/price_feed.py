@@ -5,6 +5,11 @@ During NEPSE hours, quotes come from a NepseAPI-Unofficial server's /LiveMarket
 (one snapshot for every symbol, cached briefly so users don't fan out requests).
 Outside hours - or if that server is unset/unreachable - quotes fall back to the
 latest daily bar from the pipeline's feature parquet, marked source="eod".
+
+Market hours come from the clock (app/trading/rules.py), which doesn't know
+public holidays. When the server is configured, its /IsNepseOpen can veto a
+clock "open", so a holiday reads as closed; it is only asked during clock
+hours and falls back to the clock if unreachable.
 """
 
 import json
@@ -23,6 +28,7 @@ from app.trading.rules import circuit_band, is_market_open, nepal_now
 logger = get_logger(__name__)
 
 LIVE_CACHE_SECONDS = 30.0
+STATUS_CACHE_SECONDS = 60.0
 LIVE_TIMEOUT_SECONDS = 3.0
 
 
@@ -80,6 +86,8 @@ class PriceFeed:
         self._lock = threading.Lock()
         self._live: dict[str, Quote] = {}
         self._live_fetched_at = 0.0
+        self._status: Optional[bool] = None
+        self._status_fetched_at = -STATUS_CACHE_SECONDS
 
     @staticmethod
     def _default_http_get(url: str) -> list:
@@ -128,8 +136,47 @@ class PriceFeed:
             self._live = snapshot
             return snapshot
 
+    @staticmethod
+    def _parse_status(payload) -> Optional[bool]:
+        """NEPSE's market-open payload looks like {"isOpen": "OPEN" | "CLOSE" | ...}."""
+        if not isinstance(payload, dict) or "isOpen" not in payload:
+            return None
+        value = payload["isOpen"]
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().upper() == "OPEN"
+
+    def _exchange_status(self) -> Optional[bool]:
+        """The exchange's own open/closed flag, or None when it can't be read."""
+        with self._lock:
+            if time.monotonic() - self._status_fetched_at < STATUS_CACHE_SECONDS:
+                return self._status
+            self._status_fetched_at = time.monotonic()
+            shared = self.shared_cache.get("nepse-open") if self.shared_cache else None
+            if shared is not None:
+                self._status = self._parse_status(json.loads(shared))
+                return self._status
+            try:
+                payload = self._http_get(f"{self.nepse_api_url}/IsNepseOpen")
+            except Exception as exc:
+                logger.warning("Market status unavailable (%s); using the trading calendar", exc)
+                self._status = None
+                return None
+            self._status = self._parse_status(payload)
+            if self._status is not None and self.shared_cache:
+                self.shared_cache.set("nepse-open", json.dumps(payload).encode(), ttl=STATUS_CACHE_SECONDS)
+            return self._status
+
+    def is_open(self) -> bool:
+        """Clock-based session hours, vetoed by the exchange's flag (holidays) when available."""
+        if not self.market_open():
+            return False
+        if not self.nepse_api_url:
+            return True
+        return self._exchange_status() is not False
+
     def live_quote(self, symbol: str) -> Optional[Quote]:
-        if not self.nepse_api_url or not self.market_open():
+        if not self.nepse_api_url or not self.is_open():
             return None
         return self._live_snapshot().get(symbol.upper())
 

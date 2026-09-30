@@ -78,6 +78,51 @@ def test_eod_quote_uses_latest_close_as_next_session_band():
     assert PriceFeed(_repo()).get_quote("NOPE") is None
 
 
+def _routed(status):
+    """Fake NepseAPI server: /IsNepseOpen answers `status` (an exception is raised), /LiveMarket the live rows."""
+    calls = []
+
+    def get(url):
+        calls.append(url.rsplit("/", 1)[-1])
+        if url.endswith("/IsNepseOpen"):
+            if isinstance(status, Exception):
+                raise status
+            return status
+        return LIVE_ROWS
+
+    return get, calls
+
+
+@pytest.mark.parametrize(
+    "status, expected_source, expected_open",
+    [
+        ({"isOpen": "OPEN", "asOf": "2026-09-30T11:05:00"}, "live", True),
+        ({"isOpen": "CLOSE", "asOf": "2026-09-30T11:05:00"}, "eod", False),  # public holiday
+        (ConnectionError("down"), "live", True),  # status unknown: trust the calendar
+    ],
+)
+def test_exchange_status_vetoes_clock_hours_on_holidays(status, expected_source, expected_open):
+    get, _ = _routed(status)
+    feed = PriceFeed(_repo(), "http://nepse-api", market_open=lambda: True, http_get=get)
+    assert feed.is_open() is expected_open
+    assert feed.get_quote("NABIL").source == expected_source
+
+
+def test_exchange_status_not_requested_outside_clock_hours():
+    get, calls = _routed({"isOpen": "OPEN"})
+    feed = PriceFeed(_repo(), "http://nepse-api", market_open=lambda: False, http_get=get)
+    assert feed.is_open() is False and feed.get_quote("NABIL").source == "eod"
+    assert calls == []
+
+
+def test_exchange_status_is_cached():
+    get, calls = _routed({"isOpen": "OPEN"})
+    feed = PriceFeed(_repo(), "http://nepse-api", market_open=lambda: True, http_get=get)
+    for _ in range(3):
+        feed.is_open()
+    assert calls.count("IsNepseOpen") == 1
+
+
 def test_live_quote_falls_back_to_eod_when_server_fails():
     def broken(url):
         raise ConnectionError("down")
