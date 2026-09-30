@@ -3,7 +3,8 @@ Signal generation service: centralized business logic for computing and
 interpreting BUY/SELL confidence signals.
 """
 
-from typing import Dict, List, Optional, Tuple
+import threading
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -36,10 +37,21 @@ class SignalService:
         self.stocks = stock_repository
         self._confidence_cache: Dict[Tuple[str, str, str], Optional[float]] = {}
         self._relative_strength_cache: Dict[str, Optional[float]] = {}
+        self._liquidity_cache: Dict[str, bool] = {}
+        # (family key, kind) pairs whose confidences were computed for every symbol in one batch.
+        self._warmed: set = set()
+        self._warm_lock = threading.Lock()
         self._cache_data_version: Optional[float] = None
 
     def is_liquid_enough(self, symbol: str) -> bool:
-        """Return True when a symbol has enough recent trading activity for display."""
+        """Return True when a symbol has enough recent trading activity for display (memoized per data version)."""
+        self._invalidate_caches_if_stale()
+        cached = self._liquidity_cache.get(symbol)
+        if cached is None:
+            cached = self._liquidity_cache[symbol] = self._compute_liquidity(symbol)
+        return cached
+
+    def _compute_liquidity(self, symbol: str) -> bool:
         stock_df = self.stocks.get_stock_data(symbol, settings.liquidity_lookback_days)
         if stock_df is None or stock_df.empty:
             return False
@@ -102,6 +114,11 @@ class SignalService:
         if symbol in self._relative_strength_cache:
             return self._relative_strength_cache[symbol]
 
+        if ("__relative__", "RELATIVE") not in self._warmed:
+            self._warm_batch(None, "RELATIVE")
+            if symbol in self._relative_strength_cache:
+                return self._relative_strength_cache[symbol]
+
         bundle = self.models.get_relative_bundle()
         result = self._predict(symbol, bundle, family=None, kind="RELATIVE")
         self._relative_strength_cache[symbol] = result
@@ -117,6 +134,8 @@ class SignalService:
         if current_version != self._cache_data_version:
             self._confidence_cache.clear()
             self._relative_strength_cache.clear()
+            self._liquidity_cache.clear()
+            self._warmed.clear()
             self._cache_data_version = current_version
 
     def _cached_predict(self, symbol: str, family: Optional[str], kind: str) -> Optional[float]:
@@ -132,10 +151,77 @@ class SignalService:
         if cache_key in self._confidence_cache:
             return self._confidence_cache[cache_key]
 
+        if (family or "__default__", kind) not in self._warmed:
+            self._warm_batch(family, kind)
+            if cache_key in self._confidence_cache:
+                return self._confidence_cache[cache_key]
+
         bundle = self.models.get_buy_bundle(family) if kind == "BUY" else self.models.get_sell_bundle(family)
         result = self._predict(symbol, bundle, family, kind)
         self._confidence_cache[cache_key] = result
         return result
+
+    def _bundle_for(self, family: Optional[str], kind: str) -> Optional[Dict]:
+        if kind == "BUY":
+            return self.models.get_buy_bundle(family)
+        if kind == "SELL":
+            return self.models.get_sell_bundle(family)
+        return self.models.get_relative_bundle()
+
+    def _warm_batch(self, family: Optional[str], kind: str) -> None:
+        """
+        Score every symbol with one scaler.transform + predict_proba call.
+
+        Tree ensembles have a large fixed cost per predict_proba call, so one
+        (n_symbols x n_features) batch is far cheaper than n single-row calls.
+        Results land in the same caches the per-symbol path uses.
+        """
+        warm_key = ("__relative__", "RELATIVE") if kind == "RELATIVE" else (family or "__default__", kind)
+        with self._warm_lock:
+            self._invalidate_caches_if_stale()
+            if warm_key in self._warmed:
+                return
+            bundle = self._bundle_for(family, kind)
+            predictor = bundle and (bundle.get("calibrator") or bundle.get("model"))
+            if not bundle or predictor is None or bundle.get("scaler") is None or not bundle.get("features"):
+                self._warmed.add(warm_key)
+                return
+
+            features = bundle["features"]
+            symbols, rows = [], []
+            for symbol in self.stocks.all_symbols:
+                row = self.stocks.get_latest_row(symbol, required_columns=features)
+                if row is not None:
+                    symbols.append(symbol)
+                    rows.append(row[features].to_numpy(dtype=float))
+            try:
+                if rows:
+                    X = bundle["scaler"].transform(np.vstack(rows))
+                    probabilities = predictor.predict_proba(X)[:, 1]
+                else:
+                    probabilities = []
+            except Exception as e:
+                # Leave the pair un-warmed; callers fall back to per-symbol prediction.
+                logger.error("Batch %s scoring failed (family=%s): %s", kind, family, e)
+                return
+
+            scored = {symbol: round(float(p), 4) for symbol, p in zip(symbols, probabilities)}
+            for symbol in self.stocks.all_symbols:
+                value = scored.get(symbol)
+                if kind == "RELATIVE":
+                    self._relative_strength_cache[symbol] = value
+                else:
+                    self._confidence_cache[(symbol, family or "__default__", kind)] = value
+            self._warmed.add(warm_key)
+
+    def warm(self, families: Iterable[Optional[str]] = (None,)) -> None:
+        """Precompute everything list endpoints need, so no user request pays for it."""
+        for family in families:
+            for kind in ("BUY", "SELL"):
+                self._warm_batch(family, kind)
+        self._warm_batch(None, "RELATIVE")
+        for symbol in self.stocks.all_symbols:
+            self.is_liquid_enough(symbol)
 
     def _predict(self, symbol: str, bundle: Optional[Dict], family: Optional[str], kind: str) -> Optional[float]:
         predictor = bundle and (bundle.get("calibrator") or bundle.get("model"))

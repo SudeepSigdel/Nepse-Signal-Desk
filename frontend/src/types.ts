@@ -237,3 +237,208 @@ export interface ConfidenceLogEntry {
   confidence: number
   verdict: string
 }
+
+// ─── Paper trading ─────────────────────────────────────────
+
+export type OrderSide = 'buy' | 'sell'
+export type OrderType = 'market' | 'limit'
+export type OrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled' | 'expired'
+
+export interface PaperPosition {
+  symbol: string
+  qty: number
+  avg_cost: number
+  last_price: number | null
+  price_source: 'live' | 'eod' | null
+  market_value: number | null
+  unrealized_pnl: number | null
+  unrealized_pct: number | null
+  first_buy_date: string
+}
+
+export interface PaperAccount {
+  id: number
+  name: string
+  is_agent: boolean
+  starting_cash: number
+  cash: number
+  available_cash: number
+  equity: number
+  unrealized_pnl: number
+  realized_pnl: number
+  fees_paid: number
+  return_pct: number
+  positions: PaperPosition[]
+  created_at: string
+}
+
+export interface FeeBreakdown {
+  side: OrderSide
+  trade_value: number
+  broker_commission: number
+  commission_rate: number
+  sebon_fee: number
+  dp_charge: number
+  capital_gains_tax: number
+  cgt_rate: number
+  realized_gain: number
+  total_fees: number
+  net_amount: number
+}
+
+export interface PaperOrder {
+  id: number
+  account_id: number
+  symbol: string
+  side: OrderSide
+  order_type: OrderType
+  qty: number
+  limit_price: number | null
+  status: OrderStatus
+  reject_reason: string | null
+  reserved_cash: number
+  created_at: string
+  filled_at: string | null
+  fill_price: number | null
+  price_source: 'live' | 'eod' | null
+  fees: FeeBreakdown | null
+  realized_pnl: number | null
+  note: string | null
+}
+
+export interface PaperOrderCreate {
+  symbol: string
+  side: OrderSide
+  order_type: OrderType
+  qty: number
+  limit_price?: number | null
+}
+
+export interface PaperEquityPoint {
+  date: string
+  cash: number
+  equity: number
+}
+
+export interface Quote {
+  symbol: string
+  price: number
+  prev_close: number | null
+  day_high: number | null
+  day_low: number | null
+  as_of: string
+  source: 'live' | 'eod'
+  band_reference: number | null
+  circuit_low: number | null
+  circuit_high: number | null
+  market_open: boolean
+}
+
+export interface FeePreviewRequest {
+  side: OrderSide
+  price: number
+  qty: number
+  avg_cost?: number | null
+  holding_days?: number
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  account_id: number
+  account_name: string
+  trader: string
+  is_agent: boolean
+  equity: number
+  return_pct: number
+  trades: number
+}
+
+// ─── Trading agents ────────────────────────────────────────
+
+export interface AgentMetrics {
+  start: string
+  end: string
+  days: number
+  final_equity: number
+  total_return_pct: number
+  cagr_pct: number
+  sharpe: number
+  volatility_pct: number
+  max_drawdown_pct: number
+  avg_exposure_pct?: number
+  trades: number
+  round_trips: number
+  win_rate_pct?: number | null
+  profit_factor?: number | null
+  fees_paid: number
+  annual_turnover_x?: number
+  mean_daily_return_ci_pct?: [number, number, number]
+}
+
+export interface AgentTrade {
+  date: string
+  symbol: string
+  side: OrderSide
+  qty: number
+  price: number
+  fees: number
+  realized_pnl: number
+  reason: string
+}
+
+export interface AgentEntry {
+  name: string
+  description: string
+  metrics: AgentMetrics
+  per_fold: { fold: number; year: number; return_pct: number }[]
+  equity: [string, number][]
+  recent_trades: AgentTrade[]
+}
+
+export interface AgentComparison {
+  a: string
+  b: string
+  mean_daily_diff_pct: number
+  ci_pct: [number, number]
+  significant: boolean
+  annualized_diff_pct: number
+}
+
+export interface AgentReport {
+  generated_at: string
+  family: string
+  starting_cash: number
+  period: { start: string; end: string }
+  agents: AgentEntry[]
+  comparisons: AgentComparison[]
+  tuning: { fold: number; test_start: string; test_end: string; label: string; train_sharpe: number }[]
+  data_notes: { corporate_action_gaps_adjusted: number; explanation: string }
+  method: Record<string, string>
+  rl?: {
+    window: { start: string; end: string }
+    agents: AgentEntry[]
+    edge_vs_best_benchmark: AgentComparison
+    promoted: boolean
+    promotion_reason: string
+    allocations: string[]
+  }
+}
+
+export interface LiveAgentOrder {
+  id: number
+  symbol: string
+  side: OrderSide
+  qty: number
+  status: OrderStatus
+  fill_price: number | null
+  realized_pnl: number | null
+  note: string | null
+  created_at: string
+}
+
+export interface LiveAgent {
+  name: string
+  account: PaperAccount
+  settings: string | null
+  recent_orders: LiveAgentOrder[]
+}

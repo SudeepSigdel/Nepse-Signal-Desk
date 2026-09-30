@@ -21,6 +21,16 @@ on:
           - xgboost
           - random_forest
           - both
+      refetch_prices:
+        description: Refetch every symbol's full price history from Merolagani (repairs old mis-dated rows)
+        required: false
+        default: false
+        type: boolean
+      train_rl:
+        description: Also retrain + evaluate the RL trading agent (~20 min)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -160,12 +170,24 @@ jobs:
             # run; this job is intentionally dedicated to RF training.
             EXTRA_ARGS+=(--skip-scrape --skip-news --skip-relative)
           fi
+          if [[ "${{ inputs.refetch_prices }}" == "true" ]]; then
+            EXTRA_ARGS+=(--full-refresh)
+          fi
           python automation/daily_pipeline.py \
-            --source sharesansar \
-            --delay 0.2 \
+            --source merolagani-first \
             --model-family "$PIPELINE_MODEL_FAMILY" \
             "${EXTRA_ARGS[@]}"
           echo "Pipeline completed at $(date -u)"
+
+      - name: Train RL trading agent (manual)
+        if: success() && inputs.train_rl
+        env:
+          MPLBACKEND: Agg
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python src/10_train_rl_agent.py --timesteps 30000
+          # Refresh the agent report so it includes the new RL evaluation.
+          MODEL_FAMILY=xgboost python src/09_agent_backtest.py
 
       - name: Commit updated data
         if: success()
@@ -216,7 +238,12 @@ jobs:
             data/processed/oos_predictions_rf_sell.parquet \
             data/processed/models/model_latest*.pkl \
             data/processed/report/summary_table*.csv \
-            outputs/strategy_metrics*.csv
+            outputs/strategy_metrics*.csv \
+            outputs/agents/*.json
+          # Present only once an RL policy has been promoted (src/10_train_rl_agent.py).
+          if [ -f data/processed/models/rl_agent_latest.zip ]; then
+            git add -f data/processed/models/rl_agent_latest.zip
+          fi
           if git diff --cached --quiet; then
             echo "No data changes to commit."
             exit 0

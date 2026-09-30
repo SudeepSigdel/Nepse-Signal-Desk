@@ -2,8 +2,8 @@
 set -euo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/opt/final-year-project}"
-SOURCE="${SOURCE:-sharesansar}"
-DELAY="${DELAY:-0.2}"
+SOURCE="${SOURCE:-merolagani-first}"
+DELAY="${DELAY:-0}"
 
 PYTHON_EXE="$PROJECT_ROOT/venv/bin/python"
 RUNNER="$PROJECT_ROOT/automation/daily_pipeline.py"

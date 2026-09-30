@@ -51,3 +51,16 @@ pre-purge.bundle
 !data/processed/report/summary_table_rf.csv
 !outputs/strategy_metrics.csv
 !outputs/strategy_metrics_rf.csv
+
+# Database migrations: the one-shot `migrate` compose service runs
+# `alembic upgrade head` from this image before the backend starts.
+!alembic.ini
+!alembic/
+!alembic/**
+
+# Symbol -> sector / company-name reference data (SectorRepository).
+!data/reference/
+!data/reference/**
+
+# Agent backtest reports served by GET /api/agents/report.
+!outputs/agents/*.json

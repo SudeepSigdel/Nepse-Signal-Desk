@@ -17,6 +17,9 @@ const MarketsPage = lazy(() => import('./pages/MarketsPage').then((m) => ({ defa
 const StockResearchPage = lazy(() => import('./pages/StockResearchPage').then((m) => ({ default: m.StockResearchPage })))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage').then((m) => ({ default: m.WatchlistPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then((m) => ({ default: m.PortfolioPage })))
+const TradePage = lazy(() => import('./pages/TradePage').then((m) => ({ default: m.TradePage })))
+const PaperPortfolioPage = lazy(() => import('./pages/PaperPortfolioPage').then((m) => ({ default: m.PaperPortfolioPage })))
+const AgentsPage = lazy(() => import('./pages/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const TrustPage = lazy(() => import('./pages/TrustPage').then((m) => ({ default: m.TrustPage })))
 
 function PageFallback() {
@@ -54,6 +57,23 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/trade"
+                    element={
+                      <ProtectedRoute>
+                        <TradePage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/paper"
+                    element={
+                      <ProtectedRoute>
+                        <PaperPortfolioPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/trust" element={<TrustPage />} />
                 </Route>
               </Routes>

@@ -40,6 +40,12 @@ Combined, they produce a 5-level verdict: **BUY → MODERATE → HOLD → WEAK_S
 - **Model Trust**: real walk-forward AUC per fold, a calibration chart (does stated confidence match the realized outcome rate?), and ML-validated vs. baseline strategy comparison — computed live from backtest artifacts, not hardcoded
 - **Accounts**: email/password or Google OAuth signup/login (JWT), with a persisted per-user watchlist and portfolio (Postgres) that survive across devices
 - **Exit discipline**: time-based / stop-loss / signal-decay exit guidance for tracked positions
+- **Paper trading** (educational, virtual money): practise buying and selling any listed NEPSE equity on real prices.
+  Costs match NEPSE's: tiered broker commission, SEBON fee, DP charge, and 7.5%/5% capital gains tax. Orders follow
+  the ±10% circuit band and the 10-share lot and can't short-sell. Market orders fill at live prices during market
+  hours when `NEPSE_API_URL` points at a [NepseAPI-Unofficial](https://github.com/SudeepSigdel/NepseAPI-Unofficial)
+  server. Otherwise they queue and fill at the next session's close in the daily pipeline
+  (`automation/settle_paper_trades.py`). The pages include itemized fee previews, an equity curve and a leaderboard
 
 ---
 
@@ -61,7 +67,8 @@ cp .env.example .env
 # At minimum set DATABASE_URL (a free Neon/Supabase Postgres instance) for
 # accounts/watchlist/portfolio to work — everything else has safe defaults.
 
-# 4. Apply database migrations (only needed if DATABASE_URL is set)
+# 4. Apply database migrations (only needed if DATABASE_URL is set;
+#    with docker compose the `migrate` service does this automatically)
 alembic upgrade head
 
 # 5. Start the API
@@ -157,6 +164,33 @@ docker-compose up
 | `GET` | `/api/auth/google/login` / `/api/auth/google/callback` | Google OAuth flow |
 | `GET`/`POST`/`DELETE` | `/api/watchlist`, `/api/watchlist/{symbol}` | Persisted per-user watchlist |
 | `GET`/`POST`/`DELETE` | `/api/holdings`, `/api/holdings/{id}` | Persisted per-user portfolio |
+| `GET`/`POST` | `/api/paper/accounts`, `/api/paper/accounts/{id}`, `/api/paper/accounts/{id}/reset` | Paper-trading accounts (virtual cash, positions, P&L) |
+| `GET`/`POST` | `/api/paper/accounts/{id}/orders`, `/api/paper/orders/{id}/cancel` | Place / list / cancel paper orders |
+| `GET` | `/api/paper/accounts/{id}/equity` | Daily equity snapshots |
+| `GET` | `/api/paper/quote/{symbol}` | Live (market hours) or end-of-day quote with circuit band |
+| `POST` | `/api/paper/fee-preview` | Itemized NEPSE fees/CGT for a prospective trade |
+| `GET` | `/api/paper/leaderboard` | Paper accounts ranked by return |
+
+---
+
+## Performance
+
+Market data changes once a day, so the API does the heavy work once and then serves from cache:
+
+- **Indexed data**: the feature parquet is sorted and indexed by symbol at load, so each lookup slices only that symbol's rows.
+- **Batch inference**: each model scores every symbol in a single `predict_proba` call, and this runs in a background thread at startup.
+- **Response cache** (`app/cache.py`): list, detail, signal and performance responses are cached as ready-to-send JSON bytes. Cache keys include the data and model version, so a pipeline refresh invalidates them. The cache is an in-process LRU backed by **Redis** when `REDIS_URL` is set. With Redis, workers share entries and a restarted API serves from cache immediately. If Redis goes down, the API falls back to in-process memory.
+- **HTTP caching**: responses carry an `ETag`, and the dashboard's 30-second polls get `304 Not Modified` with an empty body. `GZipMiddleware` compresses JSON about 5–7×.
+- **Redis also holds** rate-limit counters (so limits hold across workers) and one shared NEPSE live-quote snapshot.
+- The API runs on uvloop + httptools. Set `WEB_CONCURRENCY` for more workers; each holds about 0.8 GB of data and models.
+
+Measured locally with 100 symbols, before → after:
+
+| Request | Before | After |
+|---|---|---|
+| First `/api/stocks` after startup | 28.6 s | 1.3 s cold (0.05 s from Redis after a restart) |
+| Repeat `/api/stocks` | 1.7 s | ~4 ms (304 when unchanged) |
+| `/api/stocks` payload | 29.5 KB | 4.4 KB gzipped |
 
 ---
 

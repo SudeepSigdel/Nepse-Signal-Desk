@@ -9,6 +9,18 @@
 # ════════════════════════════════════════════════════════════
 
 services:
+  # One-shot: applies pending Alembic migrations to DATABASE_URL (from .env)
+  # with the same image, then exits. The backend only starts once it has
+  # succeeded, so every deploy migrates first; if a migration fails, compose
+  # stops before replacing the running backend.
+  migrate:
+    image: ghcr.io/sudeepsigdel/fyp:latest
+    container_name: nepse_migrate
+    env_file:
+      - .env
+    command: ['alembic', 'upgrade', 'head']
+    restart: 'no'
+
   backend:
     image: ghcr.io/sudeepsigdel/fyp:latest
     container_name: nepse_backend
@@ -24,9 +36,31 @@ services:
       ENV: production
       DEBUG: 'false'
       LOG_LEVEL: INFO
+      REDIS_URL: redis://redis:6379/0
+      # Each worker holds the dataset + models in memory (~0.8 GB), so raise this only
+      # if the host has room; Redis keeps the cache shared across workers either way.
+      WEB_CONCURRENCY: '1'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'python', '-c', "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  # Shared response cache + rate-limit counters (optional: the API falls back to
+  # in-process memory if Redis is unreachable). Cache only - no persistence needed.
+  redis:
+    image: redis:7-alpine
+    container_name: nepse_redis
+    restart: always
+    command: ['redis-server', '--save', '', '--appendonly', 'no', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 3s
+      retries: 3

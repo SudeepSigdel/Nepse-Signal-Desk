@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
     frontend_url: str = "http://localhost:3000"
 
+    # ─── Cache ───────────────────────────────────────────────
+    # e.g. redis://localhost:6379/0. Shares cached responses, rate-limit counters
+    # and live-quote snapshots across workers/restarts. Empty = in-process only.
+    redis_url: str = ""
+
+    # ─── Paper trading ───────────────────────────────────────
+    # Base URL of a NepseAPI-Unofficial server (e.g. http://nepseapi:8000) for live
+    # quotes during market hours. Empty = end-of-day prices only.
+    nepse_api_url: str = ""
+
     # ─── Scraper ─────────────────────────────────────────────
     scraper_source: str = "sharesansar"
     scraper_delay: float = 0.2

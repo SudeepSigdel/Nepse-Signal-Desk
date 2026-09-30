@@ -1,101 +1,279 @@
 symbol,sector,sub_index
+ACLBSL,Microfinance,Microfinance
 ADBL,Commercial Banks,Commercial Bank
 AHL,Hydropower,Hydro Power
 AHPC,Hydropower,Hydro Power
 AKJCL,Hydropower,Hydro Power
 AKPL,Hydropower,Hydro Power
+ALBSL,Microfinance,Microfinance
 ALICL,Life Insurance,Life Insurance
+ANLB,Microfinance,Microfinance
+APHL,Hydropower,Hydro Power
 API,Hydropower,Hydro Power
+AVYAN,Microfinance,Microfinance
+BANDIPUR,Hotels And Tourism,Hotels And Tourism
 BARUN,Hydropower,Hydro Power
 BBC,Manufacturing And Processing,Manufacturing And Processing
 BEDC,Hydropower,Hydro Power
 BFC,Finance,Finance
 BGWT,Hydropower,Hydro Power
+BHCL,Hydropower,Hydro Power
+BHDC,Hydropower,Hydro Power
+BHL,Hydropower,Hydro Power
 BHPL,Hydropower,Hydro Power
+BJHL,Hydropower,Hydro Power
+BNHC,Hydropower,Hydro Power
 BNL,Manufacturing And Processing,Manufacturing And Processing
 BNT,Manufacturing And Processing,Manufacturing And Processing
 BPCL,Hydropower,Hydro Power
+BUNGAL,Hydropower,Hydro Power
 CBBL,Microfinance,Microfinance
+CFCL,Finance,Finance
 CGH,Hotels And Tourism,Hotels And Tourism
 CHCL,Hydropower,Hydro Power
 CHDC,Hydropower,Hydro Power
 CHL,Hydropower,Hydro Power
 CIT,Investment,Investment
 CITY,Hotels And Tourism,Hotels And Tourism
+CKHL,Hydropower,Hydro Power
 CLI,Life Insurance,Life Insurance
+CORBL,Development Banks,Development Bank
+CREST,Life Insurance,Life Insurance
+CYCL,Microfinance,Microfinance
 CZBIL,Commercial Banks,Commercial Bank
 DDBL,Microfinance,Microfinance
+DHEL,Hydropower,Hydro Power
+DHPL,Hydropower,Hydro Power
+DLBS,Microfinance,Microfinance
+DOLTI,Hydropower,Hydro Power
+DORDI,Hydropower,Hydro Power
 EBL,Commercial Banks,Commercial Bank
+ECL,Manufacturing And Processing,Manufacturing And Processing
+EDBL,Development Banks,Development Bank
+EHPL,Hydropower,Hydro Power
+ENL,Investment,Investment
 FMDBL,Microfinance,Microfinance
 FOWAD,Microfinance,Microfinance
 GBBL,Development Banks,Development Bank
 GBIME,Commercial Banks,Commercial Bank
 GBLBS,Microfinance,Microfinance
+GCIL,Manufacturing And Processing,Manufacturing And Processing
 GFCL,Finance,Finance
+GHL,Hydropower,Hydro Power
+GILB,Microfinance,Microfinance
+GLBSL,Microfinance,Microfinance
+GLH,Hydropower,Hydro Power
+GMFBS,Microfinance,Microfinance
+GMFIL,Finance,Finance
+GMLI,Life Insurance,Life Insurance
+GRDBL,Development Banks,Development Bank
+GUFL,Finance,Finance
+GVL,Hydropower,Hydro Power
 HATHY,Investment,Investment
 HBL,Commercial Banks,Commercial Bank
+HDHPC,Hydropower,Hydro Power
 HDL,Manufacturing And Processing,Manufacturing And Processing
 HEI,Non-Life Insurance,Non Life Insurance
+HFIN,Hotels And Tourism,Hotels And Tourism
+HHL,Hydropower,Hydro Power
 HIDCL,Investment,Investment
+HIMSTAR,Hydropower,Hydro Power
+HLBSL,Microfinance,Microfinance
+HLI,Life Insurance,Life Insurance
 HPPL,Hydropower,Hydro Power
 HRL,Manufacturing And Processing,Manufacturing And Processing
+HURJA,Hydropower,Hydro Power
+ICFC,Finance,Finance
+IGI,Non-Life Insurance,Non Life Insurance
+IHL,Hydropower,Hydro Power
+ILBS,Microfinance,Microfinance
 ILI,Life Insurance,Life Insurance
 JBBL,Development Banks,Development Bank
+JBLB,Microfinance,Microfinance
 JFL,Finance,Finance
+JHAPA,Others,Others
 JOSHI,Hydropower,Hydro Power
+JSLBB,Microfinance,Microfinance
+KAHL,Hydropower,Hydro Power
 KBL,Commercial Banks,Commercial Bank
+KBSH,Hydropower,Hydro Power
 KDL,Manufacturing And Processing,Manufacturing And Processing
+KHPL,Hydropower,Hydro Power
+KKHC,Hydropower,Hydro Power
+KMCDB,Microfinance,Microfinance
 KPCL,Hydropower,Hydro Power
+KSBBL,Development Banks,Development Bank
+LBBL,Development Banks,Development Bank
+LEC,Hydropower,Hydro Power
 LICN,Life Insurance,Life Insurance
 LLBS,Microfinance,Microfinance
+LSL,Commercial Banks,Commercial Bank
+MABEL,Hydropower,Hydro Power
+MAKAR,Hydropower,Hydro Power
 MANDU,Hydropower,Hydro Power
+MATRI,Microfinance,Microfinance
+MBJC,Hydropower,Hydro Power
 MBL,Commercial Banks,Commercial Bank
+MCHL,Hydropower,Hydro Power
 MDB,Development Banks,Development Bank
+MEHL,Hydropower,Hydro Power
+MEL,Hydropower,Hydro Power
+MEN,Hydropower,Hydro Power
+MERO,Microfinance,Microfinance
 MFIL,Finance,Finance
+MHCL,Hydropower,Hydro Power
+MHL,Hydropower,Hydro Power
+MHNL,Hydropower,Hydro Power
+MKCL,Others,Others
+MKHC,Hydropower,Hydro Power
+MKHL,Hydropower,Hydro Power
+MKJC,Hydropower,Hydro Power
 MLBBL,Microfinance,Microfinance
+MLBL,Development Banks,Development Bank
+MLBS,Microfinance,Microfinance
+MLBSL,Microfinance,Microfinance
+MMKJL,Hydropower,Hydro Power
 MNBBL,Development Banks,Development Bank
+MPFL,Finance,Finance
 MSHL,Hydropower,Hydro Power
+MSLB,Microfinance,Microfinance
+NABBC,Development Banks,Development Bank
 NABIL,Commercial Banks,Commercial Bank
 NADEP,Microfinance,Microfinance
 NBL,Commercial Banks,Commercial Bank
+NESDO,Microfinance,Microfinance
+NFS,Finance,Finance
+NGPL,Hydropower,Hydro Power
+NHDL,Hydropower,Hydro Power
 NHPC,Hydropower,Hydro Power
 NICA,Commercial Banks,Commercial Bank
 NICL,Non-Life Insurance,Non Life Insurance
+NICLBSL,Microfinance,Microfinance
+NIFRA,Investment,Investment
 NIL,Non-Life Insurance,Non Life Insurance
+NIMB,Commercial Banks,Commercial Bank
 NLG,Non-Life Insurance,Non Life Insurance
 NLIC,Life Insurance,Life Insurance
+NLICL,Life Insurance,Life Insurance
+NLO,Manufacturing And Processing,Manufacturing And Processing
 NMB,Commercial Banks,Commercial Bank
+NMBMF,Microfinance,Microfinance
+NMFBS,Microfinance,Microfinance
+NMIC,Non-Life Insurance,Non Life Insurance
+NMLBBL,Microfinance,Microfinance
 NRIC,Non-Life Insurance,Non Life Insurance
+NRM,Others,Others
+NRN,Investment,Investment
 NTC,Others,Others
 NUBL,Microfinance,Microfinance
+NWCL,Others,Others
+NYADI,Hydropower,Hydro Power
 OHL,Hotels And Tourism,Hotels And Tourism
+OMPL,Manufacturing And Processing,Manufacturing And Processing
 PCBL,Commercial Banks,Commercial Bank
+PCIL,Manufacturing And Processing,Manufacturing And Processing
+PHCL,Hydropower,Hydro Power
+PMHPL,Hydropower,Hydro Power
+PMLI,Life Insurance,Life Insurance
+PPCL,Hydropower,Hydro Power
+PPL,Hydropower,Hydro Power
 PRIN,Non-Life Insurance,Non Life Insurance
+PROFL,Finance,Finance
+PRVU,Commercial Banks,Commercial Bank
+PURE,Others,Others
+RADHI,Hydropower,Hydro Power
 RAWA,Hydropower,Hydro Power
 RBCL,Non-Life Insurance,Non Life Insurance
+RFPL,Hydropower,Hydro Power
+RHGCL,Hydropower,Hydro Power
 RHPL,Hydropower,Hydro Power
+RIDI,Hydropower,Hydro Power
+RLEL,Hydropower,Hydro Power
 RLFL,Finance,Finance
 RNLI,Life Insurance,Life Insurance
+RSDC,Microfinance,Microfinance
+RSML,Manufacturing And Processing,Manufacturing And Processing
+RURU,Hydropower,Hydro Power
+SABBL,Development Banks,Development Bank
 SADBL,Development Banks,Development Bank
+SAGAR,Manufacturing And Processing,Manufacturing And Processing
 SAHAS,Hydropower,Hydro Power
+SAIL,Manufacturing And Processing,Manufacturing And Processing
+SALICO,Non-Life Insurance,Non Life Insurance
 SANIMA,Commercial Banks,Commercial Bank
 SANVI,Hydropower,Hydro Power
 SAPDBL,Development Banks,Development Bank
+SARBTM,Manufacturing And Processing,Manufacturing And Processing
 SBI,Commercial Banks,Commercial Bank
 SBL,Commercial Banks,Commercial Bank
 SCB,Commercial Banks,Commercial Bank
+SGHC,Hydropower,Hydro Power
+SGHL,Hydropower,Hydro Power
+SGIC,Non-Life Insurance,Non Life Insurance
+SHEL,Hydropower,Hydro Power
+SHINE,Development Banks,Development Bank
 SHIVM,Manufacturing And Processing,Manufacturing And Processing
 SHL,Hotels And Tourism,Hotels And Tourism
+SHLB,Microfinance,Microfinance
 SHPC,Hydropower,Hydro Power
 SICL,Non-Life Insurance,Non Life Insurance
+SIFC,Finance,Finance
 SIKLES,Hydropower,Hydro Power
 SINDU,Development Banks,Development Bank
+SIPD,Hydropower,Hydro Power
+SJCL,Hydropower,Hydro Power
+SJLIC,Life Insurance,Life Insurance
 SKBBL,Microfinance,Microfinance
+SKHEL,Hydropower,Hydro Power
+SKHL,Hydropower,Hydro Power
+SLBBL,Microfinance,Microfinance
+SLBSL,Microfinance,Microfinance
+SMATA,Microfinance,Microfinance
+SMB,Microfinance,Microfinance
+SMFBS,Microfinance,Microfinance
+SMH,Hydropower,Hydro Power
+SMHL,Hydropower,Hydro Power
+SMJC,Hydropower,Hydro Power
+SMPDA,Microfinance,Microfinance
 SNLI,Life Insurance,Life Insurance
+SNORL,Hydropower,Hydro Power
+SOHL,Hydropower,Hydro Power
+SONA,Manufacturing And Processing,Manufacturing And Processing
+SOPL,Manufacturing And Processing,Manufacturing And Processing
+SPC,Hydropower,Hydro Power
 SPDL,Hydropower,Hydro Power
+SPHL,Hydropower,Hydro Power
+SPIL,Non-Life Insurance,Non Life Insurance
+SPL,Hydropower,Hydro Power
+SRLI,Life Insurance,Life Insurance
+SSHL,Hydropower,Hydro Power
+STC,Tradings,Trading
+SWASTIK,Microfinance,Microfinance
 SWBBL,Microfinance,Microfinance
+SWMF,Microfinance,Microfinance
+SYPNL,Manufacturing And Processing,Manufacturing And Processing
+TAMOR,Hydropower,Hydro Power
+TPC,Hydropower,Hydro Power
+TPKHL,Hydropower,Hydro Power
 TRH,Hotels And Tourism,Hotels And Tourism
+TSHL,Hydropower,Hydro Power
+TTL,Others,Others
+TVCL,Hydropower,Hydro Power
+UAIL,Non-Life Insurance,Non Life Insurance
+UHEWA,Hydropower,Hydro Power
+ULBSL,Microfinance,Microfinance
+ULHC,Hydropower,Hydro Power
+UMHL,Hydropower,Hydro Power
+UMRH,Hydropower,Hydro Power
 UNHPL,Hydropower,Hydro Power
 UNL,Manufacturing And Processing,Manufacturing And Processing
+UNLB,Microfinance,Microfinance
 UPCL,Hydropower,Hydro Power
 UPPER,Hydropower,Hydro Power
+USHEC,Hydropower,Hydro Power
+USHL,Hydropower,Hydro Power
+USLB,Microfinance,Microfinance
+VLBS,Microfinance,Microfinance
+VLUCL,Hydropower,Hydro Power
+WNLB,Microfinance,Microfinance
+YMHL,Hydropower,Hydro Power

@@ -6,6 +6,15 @@
 version: '3.9'
 
 services:
+  # One-shot: `alembic upgrade head` against DATABASE_URL (from .env) before
+  # the backend starts. Re-run anytime with: docker compose run --rm migrate
+  migrate:
+    build: .
+    env_file:
+      - .env
+    command: ['alembic', 'upgrade', 'head']
+    restart: 'no'
+
   # Backend API
   backend:
     build: .
@@ -21,12 +30,32 @@ services:
       DEBUG: 'true'
       LOG_LEVEL: INFO
       CORS_ORIGINS: 'http://localhost:3000,http://localhost:5000,http://frontend:3000'
+      REDIS_URL: redis://redis:6379/0
+      # Each worker holds the dataset + models in memory (~0.8 GB), so raise this only
+      # if the host has room; Redis keeps the cache shared across workers either way.
+      WEB_CONCURRENCY: '1'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'python', '-c', "import requests; requests.get('http://localhost:8000/health', timeout=3).raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Shared response cache + rate-limit counters (optional: the API falls back to
+  # in-process memory if Redis is unreachable). Cache only - no persistence needed.
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   # Frontend (optional, build separately)
   # frontend:

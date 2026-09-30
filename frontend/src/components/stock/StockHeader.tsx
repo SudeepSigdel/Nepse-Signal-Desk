@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { formatPrice } from '../../lib/format'
 import { SignalBadge } from '../ui/SignalBadge'
 import { type TrendDirection, TrendIndicator } from '../ui/TrendIndicator'
@@ -31,6 +32,13 @@ export function StockHeader({
         <span className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{formatPrice(close)}</span>
         <SignalBadge verdict={verdict} />
         <TrendIndicator direction={trend} />
+        <Link
+          to={`/trade?symbol=${symbol}`}
+          className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          title="Practise trading this stock with virtual money"
+        >
+          Paper trade
+        </Link>
       </div>
     </div>
   )

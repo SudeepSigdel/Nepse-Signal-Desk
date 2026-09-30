@@ -29,5 +29,6 @@ ENV DEBUG=false
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run application. uvicorn reads WEB_CONCURRENCY for the worker count (default 1);
+# with REDIS_URL set, workers share one response cache and rate-limit store.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "uvloop", "--http", "httptools"]
