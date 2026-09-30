@@ -10,7 +10,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "scrapper"))
 
 from app.trading.price_quality import clean_prices  # noqa: E402
-from nepse_scraper import COL_ORDER, compute_indicators  # noqa: E402
+from nepse_scraper import compute_indicators  # noqa: E402
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 MIN_ROWS_PER_SYMBOL = 120
@@ -28,8 +28,8 @@ print(f"Loaded: {df.shape[0]:,} rows x {df.shape[1]} columns")
 if os.getenv("PRICE_REPAIR", "1") != "0":
     df, quality = clean_prices(df)
     df["Percent Change"] = np.nan  # recomputed from cleaned closes by compute_indicators
-    df = df.groupby("Symbol", group_keys=False).apply(compute_indicators)
-    df = df[[c for c in COL_ORDER if c in df.columns]].reset_index(drop=True)
+    # Explicit loop: groupby.apply drops the grouping column on newer pandas.
+    df = pd.concat([compute_indicators(g) for _, g in df.groupby("Symbol", sort=False)], ignore_index=True)
     print("Price repair:", ", ".join(f"{k}={v:,}" for k, v in quality.items()))
     report_dir = PROCESSED_DIR / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
