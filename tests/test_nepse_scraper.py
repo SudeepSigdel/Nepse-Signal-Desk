@@ -17,8 +17,8 @@ NPT = ZoneInfo("Asia/Kathmandu")
 
 
 def _udf_payload(dates, closes):
-    # Merolagani returns bar timestamps at 00:00 NPT, i.e. 18:15 UTC the previous day.
-    ts = [int((pd.Timestamp(d) - pd.Timedelta(hours=5, minutes=45)).timestamp()) for d in dates]
+    # Merolagani stamps bars with Nepal wall-clock time written as UTC, around 20:45 on the session day.
+    ts = [int((pd.Timestamp(d) + pd.Timedelta(hours=20, minutes=44, seconds=58)).timestamp()) for d in dates]
     return {"s": "ok", "t": ts, "o": closes, "h": closes, "l": closes, "c": closes, "v": [100] * len(closes)}
 
 
@@ -66,16 +66,44 @@ def _args(tmp_path, **overrides):
     return Namespace(**base)
 
 
+@pytest.fixture(autouse=True)
+def fresh_source_health(monkeypatch):
+    monkeypatch.setattr(ns, "MEROLAGANI_HEALTH", ns.SourceHealth("merolagani", max_failures_before_success=3))
+
+
 def test_fetch_merolagani_parses_udf_payload(monkeypatch):
-    session = _FakeSession(_udf_payload(["2026-09-27", "2026-09-28", "2026-09-29"], [100.0, 102.0, 101.0]))
+    session = _FakeSession(_udf_payload(["2026-09-28", "2026-09-29", "2026-09-30"], [100.0, 102.0, 101.0]))
     monkeypatch.setattr(ns, "get_session", lambda: session)
 
-    df = ns.fetch_merolagani("NABIL", datetime(2026, 9, 1), datetime(2026, 9, 30))
+    df = ns.fetch_merolagani("NABIL", datetime(2026, 9, 1), datetime(2026, 9, 30, 23, 59, 59))
 
-    assert list(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-09-27", "2026-09-28", "2026-09-29"]
+    assert list(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-09-28", "2026-09-29", "2026-09-30"]
     assert list(df["Close"]) == [100.0, 102.0, 101.0]
     assert (df["Symbol"] == "NABIL").all()
     assert len(session.calls) == 1  # whole range in one request
+    params = session.calls[0]
+    assert params["type"] == "get_advanced_chart" and params["resolution"] == "1D"
+    assert params["rangeStartDate"] == 1788220800 and params["rangeEndDate"] == 1790812799
+
+
+def test_fetch_merolagani_dates_match_trading_calendar(monkeypatch):
+    # Real timestamps from the endpoint: Thu 2025-09-04 (Sun-Thu era) and Fri 2026-04-10 (Mon-Fri era).
+    # Shifting them by +5:45 would put them on a Friday in 2025 and a Saturday in 2026.
+    payload = {"s": "ok", "t": [1757018698, 1775853895], "o": [1, 1], "h": [1, 1], "l": [1, 1], "c": [1, 1], "v": [1, 1]}
+    monkeypatch.setattr(ns, "get_session", lambda: _FakeSession(payload))
+    df = ns.fetch_merolagani("NABIL", datetime(2025, 9, 1), datetime(2026, 9, 30))
+    assert list(df["Date"].dt.strftime("%Y-%m-%d")) == ["2025-09-04", "2026-04-10"]
+
+
+def test_broken_merolagani_is_skipped_after_repeated_failures(monkeypatch):
+    session = _FakeSession(None)  # 200 with an empty body, as get_price_history now answers
+    monkeypatch.setattr(ns, "get_session", lambda: session)
+    monkeypatch.setattr(ns, "fetch_sharesansar", lambda *a: _bars("2026-09-01", 3))
+
+    for _ in range(5):
+        df, used = ns.fetch_data("AAA", datetime(2026, 9, 1), datetime(2026, 9, 30), "merolagani-first")
+        assert used == "sharesansar" and len(df) == 3
+    assert len(session.calls) == 3  # stopped asking Merolagani after 3 failures
 
 
 @pytest.mark.parametrize("payload", [None, {"s": "no_data"}, {"s": "ok", "t": []}])
