@@ -47,3 +47,10 @@ export function formatClockTime(timestamp: number | null): string {
   if (!timestamp) return '—'
   return new Date(timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
+
+/** Rupee amounts with Nepali/Indian digit grouping, e.g. "Rs 10,00,000.00". */
+export function formatMoney(value: number | null | undefined, opts: { signed?: boolean } = {}): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  const sign = opts.signed && value > 0 ? '+' : value < 0 ? '−' : ''
+  return `${sign}Rs ${Math.abs(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}

@@ -237,3 +237,117 @@ export interface ConfidenceLogEntry {
   confidence: number
   verdict: string
 }
+
+// ─── Paper trading ─────────────────────────────────────────
+
+export type OrderSide = 'buy' | 'sell'
+export type OrderType = 'market' | 'limit'
+export type OrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled' | 'expired'
+
+export interface PaperPosition {
+  symbol: string
+  qty: number
+  avg_cost: number
+  last_price: number | null
+  price_source: 'live' | 'eod' | null
+  market_value: number | null
+  unrealized_pnl: number | null
+  unrealized_pct: number | null
+  first_buy_date: string
+}
+
+export interface PaperAccount {
+  id: number
+  name: string
+  is_agent: boolean
+  starting_cash: number
+  cash: number
+  available_cash: number
+  equity: number
+  unrealized_pnl: number
+  realized_pnl: number
+  fees_paid: number
+  return_pct: number
+  positions: PaperPosition[]
+  created_at: string
+}
+
+export interface FeeBreakdown {
+  side: OrderSide
+  trade_value: number
+  broker_commission: number
+  commission_rate: number
+  sebon_fee: number
+  dp_charge: number
+  capital_gains_tax: number
+  cgt_rate: number
+  realized_gain: number
+  total_fees: number
+  net_amount: number
+}
+
+export interface PaperOrder {
+  id: number
+  account_id: number
+  symbol: string
+  side: OrderSide
+  order_type: OrderType
+  qty: number
+  limit_price: number | null
+  status: OrderStatus
+  reject_reason: string | null
+  reserved_cash: number
+  created_at: string
+  filled_at: string | null
+  fill_price: number | null
+  price_source: 'live' | 'eod' | null
+  fees: FeeBreakdown | null
+  realized_pnl: number | null
+}
+
+export interface PaperOrderCreate {
+  symbol: string
+  side: OrderSide
+  order_type: OrderType
+  qty: number
+  limit_price?: number | null
+}
+
+export interface PaperEquityPoint {
+  date: string
+  cash: number
+  equity: number
+}
+
+export interface Quote {
+  symbol: string
+  price: number
+  prev_close: number | null
+  day_high: number | null
+  day_low: number | null
+  as_of: string
+  source: 'live' | 'eod'
+  band_reference: number | null
+  circuit_low: number | null
+  circuit_high: number | null
+  market_open: boolean
+}
+
+export interface FeePreviewRequest {
+  side: OrderSide
+  price: number
+  qty: number
+  avg_cost?: number | null
+  holding_days?: number
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  account_id: number
+  account_name: string
+  trader: string
+  is_agent: boolean
+  equity: number
+  return_pct: number
+  trades: number
+}

@@ -40,6 +40,12 @@ Combined, they produce a 5-level verdict: **BUY → MODERATE → HOLD → WEAK_S
 - **Model Trust**: real walk-forward AUC per fold, a calibration chart (does stated confidence match the realized outcome rate?), and ML-validated vs. baseline strategy comparison — computed live from backtest artifacts, not hardcoded
 - **Accounts**: email/password or Google OAuth signup/login (JWT), with a persisted per-user watchlist and portfolio (Postgres) that survive across devices
 - **Exit discipline**: time-based / stop-loss / signal-decay exit guidance for tracked positions
+- **Paper trading** (educational, virtual money): practise buying and selling any listed NEPSE equity on real prices.
+  Costs match NEPSE's: tiered broker commission, SEBON fee, DP charge, and 7.5%/5% capital gains tax. Orders follow
+  the ±10% circuit band and the 10-share lot and can't short-sell. Market orders fill at live prices during market
+  hours when `NEPSE_API_URL` points at a [NepseAPI-Unofficial](https://github.com/SudeepSigdel/NepseAPI-Unofficial)
+  server. Otherwise they queue and fill at the next session's close in the daily pipeline
+  (`automation/settle_paper_trades.py`). The pages include itemized fee previews, an equity curve and a leaderboard
 
 ---
 
@@ -157,6 +163,12 @@ docker-compose up
 | `GET` | `/api/auth/google/login` / `/api/auth/google/callback` | Google OAuth flow |
 | `GET`/`POST`/`DELETE` | `/api/watchlist`, `/api/watchlist/{symbol}` | Persisted per-user watchlist |
 | `GET`/`POST`/`DELETE` | `/api/holdings`, `/api/holdings/{id}` | Persisted per-user portfolio |
+| `GET`/`POST` | `/api/paper/accounts`, `/api/paper/accounts/{id}`, `/api/paper/accounts/{id}/reset` | Paper-trading accounts (virtual cash, positions, P&L) |
+| `GET`/`POST` | `/api/paper/accounts/{id}/orders`, `/api/paper/orders/{id}/cancel` | Place / list / cancel paper orders |
+| `GET` | `/api/paper/accounts/{id}/equity` | Daily equity snapshots |
+| `GET` | `/api/paper/quote/{symbol}` | Live (market hours) or end-of-day quote with circuit band |
+| `POST` | `/api/paper/fee-preview` | Itemized NEPSE fees/CGT for a prospective trade |
+| `GET` | `/api/paper/leaderboard` | Paper accounts ranked by return |
 
 ---
 

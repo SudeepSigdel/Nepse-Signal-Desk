@@ -3,6 +3,14 @@ import { API_BASE_URL } from '../config'
 import { getToken } from './authToken'
 import type {
   AuthUser,
+  FeeBreakdown,
+  FeePreviewRequest,
+  LeaderboardEntry,
+  PaperAccount,
+  PaperEquityPoint,
+  PaperOrder,
+  PaperOrderCreate,
+  Quote,
   ExitStatusResponse,
   HoldingCreate,
   HoldingRecord,
@@ -114,4 +122,66 @@ export async function createHolding(payload: HoldingCreate): Promise<HoldingReco
 
 export async function deleteHolding(id: number): Promise<void> {
   await api.delete(`/api/holdings/${id}`)
+}
+
+// ─── Paper trading ─────────────────────────────────────────
+
+export async function fetchPaperAccounts(): Promise<PaperAccount[]> {
+  const { data } = await api.get<PaperAccount[]>('/api/paper/accounts')
+  return data
+}
+
+export async function createPaperAccount(name: string, startingCash: number): Promise<PaperAccount> {
+  const { data } = await api.post<PaperAccount>('/api/paper/accounts', { name, starting_cash: startingCash })
+  return data
+}
+
+export async function resetPaperAccount(accountId: number): Promise<PaperAccount> {
+  const { data } = await api.post<PaperAccount>(`/api/paper/accounts/${accountId}/reset`)
+  return data
+}
+
+export async function fetchPaperOrders(accountId: number): Promise<PaperOrder[]> {
+  const { data } = await api.get<PaperOrder[]>(`/api/paper/accounts/${accountId}/orders`)
+  return data
+}
+
+export async function placePaperOrder(accountId: number, payload: PaperOrderCreate): Promise<PaperOrder> {
+  const { data } = await api.post<PaperOrder>(`/api/paper/accounts/${accountId}/orders`, payload)
+  return data
+}
+
+export async function cancelPaperOrder(orderId: number): Promise<PaperOrder> {
+  const { data } = await api.post<PaperOrder>(`/api/paper/orders/${orderId}/cancel`)
+  return data
+}
+
+export async function fetchPaperEquity(accountId: number): Promise<PaperEquityPoint[]> {
+  const { data } = await api.get<PaperEquityPoint[]>(`/api/paper/accounts/${accountId}/equity`)
+  return data
+}
+
+export async function fetchQuote(symbol: string): Promise<Quote> {
+  const { data } = await api.get<Quote>(`/api/paper/quote/${encodeURIComponent(symbol)}`)
+  return data
+}
+
+export async function fetchFeePreview(payload: FeePreviewRequest): Promise<FeeBreakdown> {
+  const { data } = await api.post<FeeBreakdown>('/api/paper/fee-preview', payload)
+  return data
+}
+
+export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
+  const { data } = await api.get<LeaderboardEntry[]>('/api/paper/leaderboard')
+  return data
+}
+
+/** Pull FastAPI's `detail` message out of an axios error, for inline form errors. */
+export function apiErrorMessage(err: unknown, fallback = 'Request failed'): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg)
+  }
+  return err instanceof Error ? err.message : fallback
 }
