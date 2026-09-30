@@ -20,6 +20,7 @@ from app.api.routes import (
     auth_router,
     health_router,
     holdings_router,
+    paper_router,
     performance_router,
     positions_router,
     signals_router,
@@ -32,6 +33,8 @@ from app.repositories.model_repository import ModelRepository
 from app.repositories.sector_repository import SectorRepository
 from app.repositories.stock_repository import StockRepository
 from app.services.exit_rules import ExitRulesService
+from app.services.paper_trading_service import PaperTradingService
+from app.services.price_feed import PriceFeed
 from app.services.signal_service import SignalService
 
 # ─── Setup logging ──────────────────────────────────────────
@@ -101,6 +104,9 @@ async def lifespan(app: FastAPI):
         stop_loss_pct=5.0,
         min_buy_conf=0.45,
     )
+    app.state.price_feed = PriceFeed(stock_repository, nepse_api_url=settings.nepse_api_url)
+    app.state.paper_trading_service = PaperTradingService(app.state.price_feed)
+    logger.info("Paper trading quotes: %s", "live + EOD fallback" if settings.nepse_api_url else "EOD only")
 
     if model_repository.is_ready() and stock_repository.is_ready():
         logger.info("✓ All data loaded successfully")
@@ -147,5 +153,6 @@ app.include_router(performance_router)
 app.include_router(auth_router)
 app.include_router(watchlist_router)
 app.include_router(holdings_router)
+app.include_router(paper_router)
 
 logger.info("API ready")

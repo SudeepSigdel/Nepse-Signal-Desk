@@ -173,6 +173,16 @@ def main() -> int:
             )
         )
 
+    # Fills pending paper-trading orders at the new session's prices as soon as the
+    # feature parquet is refreshed. No-op without DATABASE_URL, and idempotent.
+    steps.append(
+        (
+            "Settle pending paper trades",
+            [python_exe, str(project_root / "automation" / "settle_paper_trades.py")],
+            None,
+        )
+    )
+
     # Relative strength is an XGBoost-only auxiliary model, independent of
     # the selected BUY/SELL family. Train it once after shared data prep.
     if not args.skip_relative:

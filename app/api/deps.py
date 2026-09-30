@@ -13,6 +13,8 @@ from app.repositories.model_repository import ModelRepository
 from app.repositories.sector_repository import SectorRepository
 from app.repositories.stock_repository import StockRepository
 from app.services.exit_rules import ExitRulesService
+from app.services.paper_trading_service import PaperTradingService
+from app.services.price_feed import PriceFeed
 from app.services.signal_service import SignalService
 
 
@@ -38,3 +40,11 @@ def get_signal_service(request: Request) -> SignalService:
 
 def get_exit_rules_service(request: Request) -> ExitRulesService:
     return request.app.state.exit_rules_service
+
+
+def get_price_feed(request: Request) -> PriceFeed:
+    return request.app.state.price_feed
+
+
+def get_paper_trading_service(request: Request) -> PaperTradingService:
+    return request.app.state.paper_trading_service

@@ -3,6 +3,7 @@
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
 from app.api.routes.holdings import router as holdings_router
+from app.api.routes.paper import router as paper_router
 from app.api.routes.performance import router as performance_router
 from app.api.routes.positions import router as positions_router
 from app.api.routes.signals import router as signals_router
@@ -18,4 +19,5 @@ __all__ = [
     "auth_router",
     "watchlist_router",
     "holdings_router",
+    "paper_router",
 ]

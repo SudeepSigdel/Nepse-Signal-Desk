@@ -284,3 +284,120 @@ class HoldingResponse(BaseModel):
     entry_price: float
     quantity: Optional[float]
     created_at: str
+
+
+# ══════════════════════════════════════════════════════════════════
+# PAPER TRADING
+# ══════════════════════════════════════════════════════════════════
+
+class PaperAccountCreate(BaseModel):
+    name: str = Field("Paper account", min_length=1, max_length=60)
+    starting_cash: float = Field(1_000_000.0, gt=0, le=100_000_000)
+
+
+class PaperPositionResponse(BaseModel):
+    symbol: str
+    qty: int
+    avg_cost: float
+    last_price: Optional[float]
+    price_source: Optional[str]
+    market_value: Optional[float]
+    unrealized_pnl: Optional[float]
+    unrealized_pct: Optional[float]
+    first_buy_date: str
+
+
+class PaperAccountResponse(BaseModel):
+    id: int
+    name: str
+    is_agent: bool
+    starting_cash: float
+    cash: float
+    available_cash: float
+    equity: float
+    unrealized_pnl: float
+    realized_pnl: float
+    fees_paid: float
+    return_pct: float
+    positions: List[PaperPositionResponse]
+    created_at: str
+
+
+class PaperOrderCreate(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=20)
+    side: str = Field(..., pattern="^(buy|sell)$")
+    order_type: str = Field("market", pattern="^(market|limit)$")
+    qty: int = Field(..., gt=0, le=10_000_000)
+    limit_price: Optional[float] = Field(None, gt=0)
+
+
+class FeeBreakdownResponse(BaseModel):
+    side: str
+    trade_value: float
+    broker_commission: float
+    commission_rate: float
+    sebon_fee: float
+    dp_charge: float
+    capital_gains_tax: float
+    cgt_rate: float
+    realized_gain: float
+    total_fees: float
+    net_amount: float
+
+
+class PaperOrderResponse(BaseModel):
+    id: int
+    account_id: int
+    symbol: str
+    side: str
+    order_type: str
+    qty: int
+    limit_price: Optional[float]
+    status: str
+    reject_reason: Optional[str]
+    reserved_cash: float
+    created_at: str
+    filled_at: Optional[str]
+    fill_price: Optional[float]
+    price_source: Optional[str]
+    fees: Optional[FeeBreakdownResponse]
+    realized_pnl: Optional[float]
+
+
+class PaperEquityPoint(BaseModel):
+    date: str
+    cash: float
+    equity: float
+
+
+class QuoteResponse(BaseModel):
+    symbol: str
+    price: float
+    prev_close: Optional[float]
+    day_high: Optional[float]
+    day_low: Optional[float]
+    as_of: str
+    source: str
+    band_reference: Optional[float]
+    circuit_low: Optional[float]
+    circuit_high: Optional[float]
+    market_open: bool
+
+
+class FeePreviewRequest(BaseModel):
+    side: str = Field(..., pattern="^(buy|sell)$")
+    price: float = Field(..., gt=0)
+    qty: int = Field(..., gt=0, le=10_000_000)
+    avg_cost: Optional[float] = Field(None, gt=0, description="Per-share cost basis, for sell-side CGT")
+    holding_days: int = Field(0, ge=0)
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    account_id: int
+    account_name: str
+    trader: str
+    is_agent: bool
+    equity: float
+    return_pct: float
+    trades: int
