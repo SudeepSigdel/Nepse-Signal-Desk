@@ -1,0 +1,11 @@
+{
+ "signal_config": {
+  "threshold": 0.7,
+  "exit_days": 10,
+  "stop_loss_pct": 5.0
+ },
+ "signal_label": "threshold 0.70, exit after 10d, stop-loss 5%",
+ "tuned_on": "2023-09-11..2026-09-11",
+ "rl_promoted": false,
+ "rl_reason": "Did not beat the benchmarks' Sharpe (0.244 vs BuyAndHold 0.35)."
+}
