@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_paper_trading_service, get_price_feed, get_response_cache
+from app.api.deps import get_data_version, get_paper_trading_service, get_price_feed, get_response_cache
 from app.cache import ResponseCache, cached_json_response
 from app.db import get_db
 from app.db_models import PaperAccount, PaperOrder, User
@@ -15,6 +15,7 @@ from app.schemas import (
     FeeBreakdownResponse,
     FeePreviewRequest,
     LeaderboardEntry,
+    MarketBenchmarkResponse,
     PaperAccountCreate,
     PaperAccountResponse,
     PaperEquityPoint,
@@ -163,6 +164,25 @@ def equity_history(
         PaperEquityPoint(date=s.date.isoformat(), cash=s.cash, equity=s.equity)
         for s in service.equity_history(db, account)
     ]
+
+
+@router.get("/accounts/{account_id}/benchmark", response_model=MarketBenchmarkResponse)
+def market_benchmark(
+    request: Request,
+    account_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    service: PaperTradingService = Depends(get_paper_trading_service),
+    cache: ResponseCache = Depends(get_response_cache),
+    version: str = Depends(get_data_version),
+):
+    """Equal-weight market return since this account opened, for "did I beat the market?"."""
+    account = _owned_account(account_id, user, db, service)
+    opened = as_utc(account.created_at).date().isoformat()
+    return cached_json_response(
+        request, cache, f"paper-benchmark:{version}:{account.id}:{opened}",
+        lambda: MarketBenchmarkResponse(**service.market_benchmark(account)),
+    )
 
 
 @router.get("/quote/{symbol}", response_model=QuoteResponse)

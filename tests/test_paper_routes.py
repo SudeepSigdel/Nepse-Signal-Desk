@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_paper_trading_service, get_price_feed, get_response_cache
+from app.api.deps import get_data_version, get_paper_trading_service, get_price_feed, get_response_cache
 from app.cache import ResponseCache
 from app.db import get_db
 from app.db_models import User
@@ -30,6 +30,7 @@ def client(db_session):
     app.dependency_overrides[get_price_feed] = lambda: service.price_feed
     cache = ResponseCache()
     app.dependency_overrides[get_response_cache] = lambda: cache
+    app.dependency_overrides[get_data_version] = lambda: "test"
     try:
         yield TestClient(app)
     finally:
@@ -109,3 +110,30 @@ def test_agent_endpoints(client, db_session):
     if report.status_code == 200:
         assert {"agents", "comparisons", "method"} <= set(report.json())
         assert client.get("/api/agents/report", headers={"If-None-Match": report.headers["etag"]}).status_code == 304
+
+
+def test_market_benchmark_since_account_opened(client, db_session):
+    from datetime import datetime, timezone
+
+    from app.db_models import PaperAccount, User
+
+    account = client.post("/api/paper/accounts", json={"name": "Bench"}).json()
+    row = db_session.get(PaperAccount, account["id"])
+    row.created_at = datetime(2026, 9, 27, 3, 0, tzinfo=timezone.utc)  # opened before the last two sessions
+    db_session.commit()
+
+    res = client.get(f"/api/paper/accounts/{account['id']}/benchmark")
+    body = res.json()
+    # NABIL 490 -> 500 (+2.04%), UPPER 195 -> 200 (+2.56%): equal-weight mean.
+    assert body["stocks"] == 2 and body["start_date"] == "2026-09-27"
+    assert body["market_return_pct"] == pytest.approx(((500 / 490 - 1) + (200 / 195 - 1)) / 2 * 100, abs=0.01)
+    assert client.get(f"/api/paper/accounts/{account['id']}/benchmark",
+                      headers={"If-None-Match": res.headers["etag"]}).status_code == 304
+
+    other = User(email="someone@example.com", hashed_password="x")
+    db_session.add(other)
+    db_session.commit()
+    foreign = PaperAccount(user_id=other.id, name="Theirs", starting_cash=1, cash=1)
+    db_session.add(foreign)
+    db_session.commit()
+    assert client.get(f"/api/paper/accounts/{foreign.id}/benchmark").status_code == 404

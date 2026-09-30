@@ -1,10 +1,12 @@
-import { Trophy, Wallet } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EquityChart } from '../components/paper/EquityChart'
 import { FeeBreakdownCard } from '../components/paper/FeeBreakdownCard'
+import { FirstStepsChecklist } from '../components/paper/FirstStepsChecklist'
 import { PaperDisclaimer } from '../components/paper/PaperDisclaimer'
-import { EmptyState } from '../components/ui/EmptyState'
+import { PaperOnboarding } from '../components/paper/PaperOnboarding'
+import { VersusCard } from '../components/paper/VersusCard'
 import { usePaperAccounts } from '../hooks/usePaperAccounts'
 import { usePaperOrders } from '../hooks/usePaperOrders'
 import { usePolling } from '../hooks/usePolling'
@@ -119,19 +121,7 @@ export function PaperPortfolioPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
         <PaperDisclaimer />
-        <EmptyState
-          icon={Wallet}
-          title="No paper account yet"
-          description="Open one with Rs 10,00,000 of virtual money to start practising."
-          action={
-            <button
-              onClick={() => create('My paper account')}
-              className="mt-2 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              Open account
-            </button>
-          }
-        />
+        <PaperOnboarding onCreate={() => create('My paper account')} />
       </div>
     )
   }
@@ -176,6 +166,9 @@ export function PaperPortfolioPage() {
             <Stat label="Realized P&L" value={formatMoney(account.realized_pnl, { signed: true })} tone={pnlTone(account.realized_pnl)} />
             <Stat label="Fees & tax paid" value={formatMoney(account.fees_paid)} />
           </div>
+
+          <FirstStepsChecklist accountId={account.id} orders={orders} />
+          <VersusCard account={account} />
 
           <div className={cardClass}>
             <div className="mb-2 flex items-center justify-between">

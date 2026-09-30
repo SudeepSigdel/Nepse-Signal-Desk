@@ -1,8 +1,9 @@
-import { ArrowLeftRight, Wallet } from 'lucide-react'
+import { ArrowLeftRight } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FeeBreakdownCard } from '../components/paper/FeeBreakdownCard'
 import { PaperDisclaimer } from '../components/paper/PaperDisclaimer'
+import { PaperOnboarding } from '../components/paper/PaperOnboarding'
 import { EmptyState } from '../components/ui/EmptyState'
 import { SignalBadge } from '../components/ui/SignalBadge'
 import { useStocksContext } from '../context/StocksContext'
@@ -195,19 +196,7 @@ export function TradePage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
         <PaperDisclaimer />
-        <EmptyState
-          icon={Wallet}
-          title="Open a paper trading account"
-          description="Start with Rs 10,00,000 of virtual money and practise buying and selling real NEPSE stocks with real fees."
-          action={
-            <button
-              onClick={() => create('My paper account')}
-              className="mt-2 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              Open account
-            </button>
-          }
-        />
+        <PaperOnboarding onCreate={() => create('My paper account')} />
       </div>
     )
   }

@@ -442,3 +442,12 @@ export interface LiveAgent {
   settings: string | null
   recent_orders: LiveAgentOrder[]
 }
+
+export interface MarketBenchmark {
+  account_id: number
+  opened: string
+  start_date: string | null
+  end_date: string | null
+  market_return_pct: number
+  stocks: number
+}

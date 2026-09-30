@@ -59,10 +59,13 @@ class PaperTradingService:
         price_feed: PriceFeed,
         clock: Callable[[], datetime] = nepal_now,
         market_open: Callable[[datetime], bool] = is_market_open,
+        is_liquid: Optional[Callable[[str], bool]] = None,
     ):
         self.price_feed = price_feed
         self.clock = clock
         self.market_open = market_open
+        # Which stocks count as "the market" for benchmarks (SignalService.is_liquid_enough in the app).
+        self.is_liquid = is_liquid or (lambda symbol: True)
 
     # ─── Accounts ────────────────────────────────────────────
 
@@ -336,6 +339,35 @@ class PaperTradingService:
             "return_pct": round((equity / account.starting_cash - 1) * 100, 2) if account.starting_cash else 0.0,
             "positions": positions,
             "created_at": as_utc(account.created_at).isoformat(),
+        }
+
+    def market_benchmark(self, account: PaperAccount) -> dict:
+        """
+        Equal-weight return of liquid NEPSE stocks since the account opened:
+        "what if you had simply bought the whole market on day one?" (no fees).
+        """
+        repo = self.price_feed.stock_repository
+        opened = as_utc(account.created_at).astimezone(NEPAL_TZ).date()
+        changes, starts, ends = [], [], []
+        for symbol in repo.all_symbols:
+            if not self.is_liquid(symbol):
+                continue
+            window = repo.close_change_since(symbol, opened)
+            if window is None:
+                continue
+            first_date, first_close, last_close = window
+            changes.append(last_close / first_close - 1)
+            starts.append(first_date)
+        latest = None
+        if repo.features_df is not None and len(repo.features_df):
+            latest = repo.features_df["Date"].max()
+        return {
+            "account_id": account.id,
+            "opened": opened.isoformat(),
+            "start_date": min(starts).date().isoformat() if starts else None,
+            "end_date": latest.date().isoformat() if latest is not None else None,
+            "market_return_pct": round(sum(changes) / len(changes) * 100, 2) if changes else 0.0,
+            "stocks": len(changes),
         }
 
     def equity_history(self, db: Session, account: PaperAccount) -> list[PaperEquitySnapshot]:
