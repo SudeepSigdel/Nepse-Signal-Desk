@@ -117,8 +117,10 @@ def test_limit_fill_price(side, limit, low, high, close, expected):
         (datetime(2026, 9, 29, 14, 59), True),
         (datetime(2026, 9, 29, 15, 0), False),  # closed at 15:00
         (datetime(2026, 9, 29, 10, 59), False),
-        (datetime(2026, 9, 27, 12, 0), True),  # Sunday trades
-        (datetime(2026, 10, 2, 12, 0), False),  # Friday
+        (datetime(2026, 9, 27, 12, 0), False),  # Sunday: closed since the April 2026 Mon-Fri switch
+        (datetime(2026, 10, 2, 12, 0), True),  # Friday now trades
+        (datetime(2025, 9, 28, 12, 0), True),  # Sunday traded in 2025 (Sun-Thu era)
+        (datetime(2025, 10, 3, 12, 0), False),  # Friday closed in 2025
     ],
 )
 def test_market_hours(now, is_open):

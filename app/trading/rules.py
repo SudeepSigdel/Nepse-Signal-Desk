@@ -5,10 +5,11 @@ from datetime import datetime, time
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from app.trading.calendar import is_trading_weekday
+
 NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 MARKET_OPEN = time(11, 0)
 MARKET_CLOSE = time(15, 0)
-TRADING_WEEKDAYS = {6, 0, 1, 2, 3}  # Sun-Thu (Mon=0 ... Sun=6)
 CIRCUIT_LIMIT = 0.10  # daily price band around the previous close
 MIN_BUY_QTY = 10  # board lot; sells may be any whole quantity held (odd-lot exits)
 
@@ -21,9 +22,9 @@ def nepal_now() -> datetime:
 
 
 def is_market_open(now: Optional[datetime] = None) -> bool:
-    """Regular session check. Public holidays aren't known, so a holiday reads as open."""
+    """Regular session check (Mon-Fri since April 2026). Public holidays aren't known, so a holiday reads as open."""
     now = (now or nepal_now()).astimezone(NEPAL_TZ)
-    return now.weekday() in TRADING_WEEKDAYS and MARKET_OPEN <= now.time() < MARKET_CLOSE
+    return is_trading_weekday(now.date()) and MARKET_OPEN <= now.time() < MARKET_CLOSE
 
 
 def circuit_band(prev_close: float) -> tuple[float, float]:

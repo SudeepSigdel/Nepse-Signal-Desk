@@ -30,7 +30,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 logging.getLogger("app.services.exit_rules").setLevel(logging.WARNING)
 
 from app.agents.blend_agent import BlendAgent  # noqa: E402
-from app.agents.data import adjust_for_corporate_actions, family_suffix, load_market_data  # noqa: E402
+from app.agents.data import family_suffix, load_market_data  # noqa: E402
+from app.trading.price_quality import clean_prices  # noqa: E402
 from app.agents.report import build_report, paired_difference  # noqa: E402
 from app.agents.signal_agent import BuyAndHoldAgent, RandomAgent, SignalAgent  # noqa: E402
 from app.agents.tuning import config_label, grid_configs, load_folds, score, walk_forward  # noqa: E402
@@ -90,8 +91,10 @@ def main() -> None:
         paired_difference(results["TunedSignalBot"], results["BuyAndHold"]),
         paired_difference(results["CoreSatellite"], results["BuyAndHold"]),
     ]
-    raw_prices = pd.read_parquet(PROCESSED / "all_stocks_features.parquet", columns=["Symbol", "Date", "Close"])
-    _, gap_count = adjust_for_corporate_actions(raw_prices)
+    raw_prices = pd.read_parquet(
+        PROCESSED / "all_stocks_features.parquet", columns=["Symbol", "Date", "Close", "Volume"]
+    )
+    _, quality = clean_prices(raw_prices)
 
     report = build_report(
         family,
@@ -102,9 +105,11 @@ def main() -> None:
             "tuning": choices,
             "comparisons": comparisons,
             "data_notes": {
-                "corporate_action_gaps_adjusted": gap_count,
-                "explanation": "Stored prices are not adjusted for bonus/right shares. Close-to-close moves beyond "
-                "NEPSE's ±10% circuit were treated as corporate actions and earlier prices back-adjusted.",
+                "corporate_action_gaps_adjusted": quality["corporate_action_gaps_adjusted"],
+                "quality_report": quality,
+                "explanation": "Prices are cleaned before use (app/trading/price_quality.py): day/month-swapped "
+                "duplicate rows and off-calendar rows removed, single-day bad prints dropped, and moves beyond "
+                "NEPSE's ±10% circuit treated as bonus/right-share adjustments with earlier prices back-adjusted.",
             },
             "method": {
                 "fills": "Orders decided after a session's close fill at the next session's close.",

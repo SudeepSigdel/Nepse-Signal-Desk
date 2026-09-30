@@ -89,8 +89,9 @@ def test_fetch_merolagani_returns_none_without_data(monkeypatch, payload):
     [
         (datetime(2026, 9, 29, 16, 0, tzinfo=NPT), "2026-09-29"),  # Tue after close
         (datetime(2026, 9, 29, 12, 0, tzinfo=NPT), "2026-09-28"),  # Tue before close
-        (datetime(2026, 10, 3, 10, 0, tzinfo=NPT), "2026-10-01"),  # Sat -> Thu
-        (datetime(2026, 10, 4, 9, 0, tzinfo=NPT), "2026-10-01"),  # Sun before open -> Thu
+        (datetime(2026, 10, 3, 10, 0, tzinfo=NPT), "2026-10-02"),  # Sat -> Fri (Mon-Fri since Apr 2026)
+        (datetime(2026, 10, 5, 9, 0, tzinfo=NPT), "2026-10-02"),  # Mon before close -> Fri
+        (datetime(2025, 10, 4, 10, 0, tzinfo=NPT), "2025-10-02"),  # 2025 Sat -> Thu (Sun-Thu era)
     ],
 )
 def test_last_expected_trading_day(now, expected):
@@ -187,3 +188,28 @@ def test_rate_limiter_spaces_requests(monkeypatch):
     for _ in range(3):
         limiter.wait()
     assert sleeps == pytest.approx([0.25, 0.5])
+
+
+def test_sharesansar_dates_parse_iso_without_day_month_swap():
+    parsed = ns.parse_sharesansar_dates(["2026-01-05", "2026-01-05 00:00:00", "05/01/2026", "25/12/2025", "junk"])
+    assert list(parsed[:4].dt.strftime("%Y-%m-%d")) == ["2026-01-05", "2026-01-05", "2026-01-05", "2025-12-25"]
+    assert pd.isna(parsed.iloc[4])
+
+
+def test_full_refresh_replaces_history_from_history_start(tmp_path, monkeypatch):
+    ns.update_csv("AAA", _bars("2026-09-01", 21), str(tmp_path))
+    requested = []
+
+    def fake_fetch(symbol, start_dt, end_dt, source):
+        requested.append(start_dt)
+        return _bars("2026-08-03", 30, close=50.0), "merolagani"
+
+    monkeypatch.setattr(ns, "fetch_data", fake_fetch)
+    status, _, _, detail = ns.process_symbol(
+        "AAA", datetime(2020, 1, 1), datetime(2012, 1, 1), datetime(2026, 9, 30), pd.Timestamp("2026-08-01"),
+        _args(tmp_path, full_refresh=True),
+    )
+    assert status == "refreshed" and "--full-refresh" in detail
+    assert requested == [datetime(2012, 1, 1)]
+    saved = pd.read_csv(tmp_path / "AAA.csv")
+    assert len(saved) == 30 and saved["Close"].iloc[0] == 50.0

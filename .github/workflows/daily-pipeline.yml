@@ -21,6 +21,11 @@ on:
           - xgboost
           - random_forest
           - both
+      refetch_prices:
+        description: Refetch every symbol's full price history from Merolagani (repairs old mis-dated rows)
+        required: false
+        default: false
+        type: boolean
       train_rl:
         description: Also retrain + evaluate the RL trading agent (~20 min)
         required: false
@@ -164,6 +169,9 @@ jobs:
             # Reuse the data and relative model produced by the earlier daily
             # run; this job is intentionally dedicated to RF training.
             EXTRA_ARGS+=(--skip-scrape --skip-news --skip-relative)
+          fi
+          if [[ "${{ inputs.refetch_prices }}" == "true" ]]; then
+            EXTRA_ARGS+=(--full-refresh)
           fi
           python automation/daily_pipeline.py \
             --source merolagani-first \

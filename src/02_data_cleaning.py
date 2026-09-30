@@ -1,15 +1,41 @@
+import json
 import pandas as pd
 import numpy as np
 import os
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "scrapper"))
+
+from app.trading.price_quality import clean_prices  # noqa: E402
+from nepse_scraper import COL_ORDER, compute_indicators  # noqa: E402
+
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 MIN_ROWS_PER_SYMBOL = 120
 LOW_COVERAGE_MEDIAN_FRACTION = 0.5
 
 df = pd.read_parquet(os.path.join(PROCESSED_DIR, "all_stocks_combined.parquet"))
 print(f"Loaded: {df.shape[0]:,} rows x {df.shape[1]} columns")
+
+# ── Price-history repair (see app/trading/price_quality.py) ──
+# Removes day/month-swapped duplicates and off-calendar rows from the old
+# Sharesansar date-parsing bug, drops single-day bad prints, and back-adjusts
+# bonus/right-share gaps so returns, indicators and labels aren't polluted by
+# fake crashes. Indicators are then recomputed on the cleaned prices.
+# PRICE_REPAIR=0 skips this step (ablation / before-after comparisons only).
+if os.getenv("PRICE_REPAIR", "1") != "0":
+    df, quality = clean_prices(df)
+    df["Percent Change"] = np.nan  # recomputed from cleaned closes by compute_indicators
+    df = df.groupby("Symbol", group_keys=False).apply(compute_indicators)
+    df = df[[c for c in COL_ORDER if c in df.columns]].reset_index(drop=True)
+    print("Price repair:", ", ".join(f"{k}={v:,}" for k, v in quality.items()))
+    report_dir = PROCESSED_DIR / "report"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    (report_dir / "data_quality.json").write_text(json.dumps(quality, indent=1))
+else:
+    print("Price repair skipped (PRICE_REPAIR=0)")
 
 df["Volume"] = df.groupby("Symbol")["Volume"].ffill()
 

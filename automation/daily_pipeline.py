@@ -31,6 +31,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-relative", action="store_true", help="Skip Relative Strength model training.")
     parser.add_argument("--skip-parquet", action="store_true", help="Pass --skip-parquet to scraper.")
     parser.add_argument(
+        "--full-refresh",
+        action="store_true",
+        help="Pass --full-refresh to the scraper: refetch every symbol's full history and replace its CSV.",
+    )
+    parser.add_argument(
         "--model-family",
         choices=["both", "xgboost", "random_forest", "rf"],
         default="both",
@@ -139,6 +144,8 @@ def main() -> int:
             scrape_cmd.extend(["--symbols", args.symbols.strip()])
         if args.skip_parquet:
             scrape_cmd.append("--skip-parquet")
+        if args.full_refresh:
+            scrape_cmd.append("--full-refresh")
 
         steps.append(("Scrape latest NEPSE data", scrape_cmd, None))
 

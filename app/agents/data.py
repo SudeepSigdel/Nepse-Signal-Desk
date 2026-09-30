@@ -13,34 +13,9 @@ from typing import Optional
 import pandas as pd
 
 from app.trading.backtest import MarketData, add_liquidity
+from app.trading.price_quality import adjust_for_corporate_actions, clean_prices  # noqa: F401 (re-export)
 
 PRICE_COLUMNS = ["Symbol", "Date", "Open", "High", "Low", "Close", "Volume", "Turnover"]
-# NEPSE's daily circuit is ±10%, so a bigger close-to-close gap can't be a real
-# trade - it's a bonus/right share adjustment (or a bad row) in unadjusted data.
-CORPORATE_ACTION_GAP = 0.105
-
-
-def adjust_for_corporate_actions(frame: pd.DataFrame, gap: float = CORPORATE_ACTION_GAP) -> tuple[pd.DataFrame, int]:
-    """
-    Back-adjust prices so impossible overnight gaps don't read as crashes or
-    windfalls. Each gap's ratio rescales all earlier prices of that symbol
-    (volumes inversely), the standard construction of an adjusted series.
-    Returns (adjusted frame, number of gaps adjusted).
-    """
-    df = frame.sort_values(["Symbol", "Date"]).copy()
-    ratio = df["Close"] / df.groupby("Symbol")["Close"].shift(1)
-    is_gap = (ratio - 1).abs() > gap
-    step = ratio.where(is_gap, 1.0).fillna(1.0)
-    # factor for row i = product of gap ratios strictly after i (within the symbol)
-    later = step.groupby(df["Symbol"]).transform(lambda s: s[::-1].cumprod()[::-1].shift(-1, fill_value=1.0))
-    for column in ("Open", "High", "Low", "Close"):
-        if column in df:
-            df[column] = df[column] * later
-    if "Volume" in df:
-        df["Volume"] = df["Volume"] / later
-    return df, int(is_gap.sum())
-
-
 def family_suffix(family: str) -> str:
     return "" if family == "xgboost" else "_rf"
 
@@ -48,8 +23,10 @@ def family_suffix(family: str) -> str:
 def load_market_frame(processed_dir: Path, family: str = "xgboost") -> pd.DataFrame:
     prices = pd.read_parquet(processed_dir / "all_stocks_features.parquet", columns=PRICE_COLUMNS)
     prices["Date"] = pd.to_datetime(prices["Date"])
-    prices, gaps = adjust_for_corporate_actions(prices)
-    prices.attrs["corporate_action_gaps"] = gaps
+    # Idempotent: the pipeline already cleans all_stocks_features.parquet, but
+    # older artifacts may not be, and the backtest must never see bad rows.
+    prices, report = clean_prices(prices)
+    prices.attrs["quality_report"] = report
     prices = add_liquidity(prices)
 
     suffix = family_suffix(family)

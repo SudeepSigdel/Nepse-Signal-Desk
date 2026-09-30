@@ -23,7 +23,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from universe import DEFAULT_REFERENCE_DIR, load_universe_symbols  # noqa: E402
+
+from app.trading import calendar as nepse_calendar  # noqa: E402
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_RAW_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
@@ -41,8 +44,6 @@ OVERLAP_DAYS = 10
 # Median |relative close difference| on the overlap above which the stored
 # history is considered inconsistent with the source and is refetched in full.
 ADJUSTMENT_TOLERANCE = 0.01
-NEPSE_CLOSE_HOUR = 15
-NEPSE_TRADING_WEEKDAYS = {6, 0, 1, 2, 3}  # Sun-Thu (Mon=0 ... Sun=6)
 START_DATE_ENV_VAR = "NEPSE_SCRAPER_START_DATE"
 NEPAL_TZ = ZoneInfo("Asia/Kathmandu")
 # Sharesansar's endpoint returns empty payloads for large 'length' values.
@@ -217,6 +218,12 @@ def parse_args():
         help="Fetch every symbol even if its CSV already has the latest trading day.",
     )
     parser.add_argument(
+        "--full-refresh",
+        action="store_true",
+        help="Refetch each symbol's whole history from --history-start and replace its CSV "
+        "(repairs rows mis-dated by the old Sharesansar date parser).",
+    )
+    parser.add_argument(
         "--skip-parquet",
         action="store_true",
         help="Skip rebuilding all_stocks_combined.parquet.",
@@ -322,6 +329,21 @@ def _safe_to_numeric(series):
     return pd.to_numeric(cleaned, errors="coerce")
 
 
+def parse_sharesansar_dates(values):
+    """
+    Sharesansar dates may be ISO (2026-01-05) or day-first (05/01/2026).
+    pd.to_datetime(..., dayfirst=True) on ISO strings swaps day and month
+    (2026-01-05 -> 1 May), which mis-dated thousands of rows in 2026, so ISO
+    strings are parsed with an explicit format and only the rest day-first.
+    """
+    text = pd.Series(values).astype(str).str.strip()
+    iso = text.str.match(r"^\d{4}-\d{2}-\d{2}")
+    parsed = pd.Series(pd.NaT, index=text.index, dtype="datetime64[ns]")
+    parsed[iso] = pd.to_datetime(text[iso].str[:10], format="%Y-%m-%d", errors="coerce")
+    parsed[~iso] = pd.to_datetime(text[~iso], errors="coerce", dayfirst=True)
+    return parsed
+
+
 def fetch_sharesansar(symbol, start_dt, end_dt):
     sharesansar_session = build_sharesansar_session()
     page_url = f"https://www.sharesansar.com/company/{symbol}"
@@ -389,7 +411,7 @@ def fetch_sharesansar(symbol, start_dt, end_dt):
         return None
 
     out = pd.DataFrame()
-    out["Date"] = pd.to_datetime(df["published_date"], errors="coerce", dayfirst=True)
+    out["Date"] = parse_sharesansar_dates(df["published_date"]).to_numpy()
     out["Open"] = _safe_to_numeric(df.get("open", pd.Series(dtype="object")))
     out["High"] = _safe_to_numeric(df.get("high", pd.Series(dtype="object")))
     out["Low"] = _safe_to_numeric(df.get("low", pd.Series(dtype="object")))
@@ -434,14 +456,8 @@ def nepal_today_end() -> datetime:
 
 
 def last_expected_trading_day(nepal_now=None):
-    """Most recent Sun-Thu session whose close has passed (public holidays aren't known)."""
-    nepal_now = nepal_now or datetime.now(NEPAL_TZ)
-    day = pd.Timestamp(nepal_now.date())
-    if nepal_now.hour < NEPSE_CLOSE_HOUR:
-        day -= pd.Timedelta(days=1)
-    while day.weekday() not in NEPSE_TRADING_WEEKDAYS:
-        day -= pd.Timedelta(days=1)
-    return day
+    """Most recent session whose close has passed (see app/trading/calendar.py; holidays aren't known)."""
+    return pd.Timestamp(nepse_calendar.last_expected_trading_day(nepal_now))
 
 
 def needs_full_refresh(existing, fetched, tolerance=ADJUSTMENT_TOLERANCE):
@@ -602,8 +618,16 @@ def process_symbol(symbol, global_start, history_start, today, last_trading_day,
     existing = load_existing(csv_path)
     last_date = existing["Date"].max().normalize() if existing is not None and not existing.empty else None
 
-    if last_date is not None and not args.force and last_date >= last_trading_day:
+    full_refresh = getattr(args, "full_refresh", False)
+    if last_date is not None and not (args.force or full_refresh) and last_date >= last_trading_day:
         return "current", symbol, 0, "already has latest session"
+
+    if full_refresh:
+        fetched, source_used = fetch_data(symbol, history_start, today, args.source)
+        if fetched is None or fetched.empty:
+            return "failed", symbol, 0, "full refresh returned no data; CSV left unchanged"
+        added, latest = update_csv(symbol, fetched, args.raw_dir, replace=True)
+        return "refreshed", symbol, added, f"{source_used}, full history rewritten (--full-refresh)"
 
     if last_date is not None:
         symbol_start = max(global_start, last_date.to_pydatetime() - timedelta(days=OVERLAP_DAYS))
